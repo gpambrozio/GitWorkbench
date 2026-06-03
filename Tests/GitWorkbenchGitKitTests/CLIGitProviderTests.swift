@@ -74,6 +74,17 @@ final class CLIGitProviderTests: XCTestCase {
         XCTAssertTrue(diff.hunks.flatMap { $0.lines }.contains { $0.kind == .addition })
     }
 
+    func test_loadDiffForUntrackedFileShowsContentAsAdditions() async throws {
+        // c.txt ("untracked\n") is untracked; `git diff -- c.txt` is empty, so we use --no-index
+        // to show its whole content as added lines instead of a blank pane.
+        let file = FileChange(path: "c.txt", status: .untracked, isStaged: false)
+        let diff = try await provider.loadDiff(DiffRequest(file: file, context: .workingTree(staged: false), mode: .unified))
+        let lines = diff.hunks.flatMap { $0.lines }
+        XCTAssertFalse(lines.isEmpty, "untracked file diff should show its content")
+        XCTAssertTrue(lines.allSatisfy { $0.kind == .addition }, "every line is an addition")
+        XCTAssertTrue(lines.contains { $0.text.contains("untracked") })
+    }
+
     func test_loadStashes() async throws {
         try await git(["stash", "push", "-u", "-m", "wip stash"])
         let stashes = try await provider.loadStashes()

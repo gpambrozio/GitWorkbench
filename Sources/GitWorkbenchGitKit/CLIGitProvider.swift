@@ -76,9 +76,13 @@ public struct CLIGitProvider: GitWorkbenchProvider {
         let text: String
         switch request.context {
         case .workingTree(let staged):
-            let args = staged ? ["diff", "--cached", "--", request.file.path]
-                              : ["diff", "--", request.file.path]
-            text = try await runner.output(args).text
+            if !staged, request.file.status == .untracked {
+                text = try await untrackedDiffText(request.file.path)
+            } else {
+                let args = staged ? ["diff", "--cached", "--", request.file.path]
+                                  : ["diff", "--", request.file.path]
+                text = try await runner.output(args).text
+            }
         case .commit(let id):
             text = try await runner.output(["show", id, "--format=", "--", request.file.path]).text
         case .stash(let id):
@@ -88,6 +92,19 @@ public struct CLIGitProvider: GitWorkbenchProvider {
             text = try await runner.output(["diff", "\(id)^", id, "--", request.file.path]).text
         }
         return DiffParser.parse(unifiedDiff: text, file: request.file)
+    }
+
+    /// An untracked file has no tracked diff, so `git diff -- <path>` is empty. Show its whole
+    /// content as additions via `git diff --no-index /dev/null <path>` — which exits 1 when the
+    /// files differ (always, here), so accept exit ≤ 1 and only throw on a real error.
+    private func untrackedDiffText(_ path: String) async throws -> String {
+        guard !path.hasSuffix("/") else { return "" }   // an untracked directory has no single-file diff
+        let result = try await runner.run(["diff", "--no-index", "/dev/null", path])
+        guard result.exitCode <= 1 else {
+            throw GitError.commandFailed(arguments: ["diff", "--no-index", path],
+                                         code: result.exitCode, stderr: result.stderr)
+        }
+        return result.text
     }
 
     // MARK: Helpers
