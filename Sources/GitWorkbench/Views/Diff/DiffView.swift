@@ -30,9 +30,12 @@ struct DiffView: View {
         let inner = inner()
         return GeometryReader { geo in
             ScrollView([.vertical, .horizontal]) {
-                // A concrete width (not minWidth) — inside a horizontal ScrollView the proposed width
-                // is unbounded, so minWidth has nothing to floor against and the content collapses.
+                // Concrete width (not minWidth) — in a horizontal ScrollView the proposed width is
+                // unbounded, so minWidth has nothing to floor against and the column collapses.
+                // Separate minHeight = viewport so a short diff fills from the top (not centered);
+                // a tall diff exceeds it and scrolls. (width+minHeight can't be one .frame call.)
                 inner.frame(width: max(minWidth, geo.size.width), alignment: .topLeading)
+                    .frame(minHeight: geo.size.height, alignment: .topLeading)
             }
         }
     }
