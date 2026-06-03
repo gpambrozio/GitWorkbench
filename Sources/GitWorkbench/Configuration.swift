@@ -30,6 +30,8 @@ public struct WorkbenchConfiguration: Sendable {
     public var persistenceKey: String? = nil
     /// Pane sizing.
     public var layout: WorkbenchLayout = .init()
+    /// Visual theme (light identity by default).
+    public var theme: WorkbenchTheme = .standard
 
     public init() {}
 }
