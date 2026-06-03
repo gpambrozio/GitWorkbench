@@ -14,10 +14,15 @@ extension CLIGitProvider {
 
     public func discard(_ file: FileChange) async throws {
         if file.status == .untracked {
+            // Untracked files aren't in the index or HEAD, so `restore` can't match them.
             // `-d` so a fully-untracked directory (reported as a single entry) is removed too, not just files.
             _ = try await runner.output(["clean", "-fd", "--", file.path])
         } else {
-            _ = try await runner.output(["restore", "--", file.path])
+            // Reset BOTH the index and the working tree to HEAD. The old `restore -- <path>` only reverted
+            // the worktree from the index, so a STAGED modification (or staged deletion) survived in the
+            // index and reappeared on the next status read. This form also removes a staged-added file,
+            // whose path isn't in HEAD.
+            _ = try await runner.output(["restore", "--source=HEAD", "--staged", "--worktree", "--", file.path])
         }
     }
 

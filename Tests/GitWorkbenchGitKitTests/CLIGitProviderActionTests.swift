@@ -56,6 +56,36 @@ final class CLIGitProviderActionTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.path))   // clean -fd removed it
     }
 
+    func test_discardRevertsStagedModification() async throws {
+        // Regression: discarding a STAGED file must reset the index too, not just the worktree —
+        // otherwise the staged change survives and reappears on the next status read.
+        try "changed\n".write(to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try await provider.stage([FileChange(path: "a.txt", status: .modified)])
+        try await provider.discard(FileChange(path: "a.txt", status: .modified, isStaged: true))
+        let contents = try String(contentsOf: repo.appendingPathComponent("a.txt"), encoding: .utf8)
+        XCTAssertEqual(contents, "v1\n")                                        // worktree reverted
+        let files = try await provider.loadStatus().files
+        XCTAssertTrue(files.isEmpty, "staged file should be fully gone from status, got \(files)")
+    }
+
+    func test_discardRestoresStagedDeletion() async throws {
+        _ = try await GitRunner(repositoryURL: repo).output(["rm", "a.txt"])    // staged deletion
+        try await provider.discard(FileChange(path: "a.txt", status: .deleted, isStaged: true))
+        let contents = try String(contentsOf: repo.appendingPathComponent("a.txt"), encoding: .utf8)
+        XCTAssertEqual(contents, "v1\n")                                        // file restored from HEAD
+        let files = try await provider.loadStatus().files
+        XCTAssertTrue(files.isEmpty, "staged deletion should be fully discarded, got \(files)")
+    }
+
+    func test_discardRemovesStagedAddedFile() async throws {
+        try "brand new\n".write(to: repo.appendingPathComponent("c.txt"), atomically: true, encoding: .utf8)
+        try await provider.stage([FileChange(path: "c.txt", status: .added)])
+        try await provider.discard(FileChange(path: "c.txt", status: .added, isStaged: true))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repo.appendingPathComponent("c.txt").path))
+        let files = try await provider.loadStatus().files
+        XCTAssertTrue(files.isEmpty, "staged-added file should be removed, got \(files)")
+    }
+
     func test_switchBranch() async throws {
         _ = try await GitRunner(repositoryURL: repo).output(["branch", "dev"])
         try await provider.switchBranch(to: Branch(name: "dev"))
