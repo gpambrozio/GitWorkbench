@@ -1,18 +1,18 @@
 import SwiftUI
 
-/// The reusable git-workbench component. Plan 1 renders a themed skeleton from a
-/// `WorkbenchState` value; later plans add the store, real toolbar/rail, and views.
+/// The reusable git-workbench component. Observes a host-provided `GitWorkbenchStore`.
+/// (Plan 3 renders the same themed skeleton as before; later plans add the real
+/// toolbar/rail and the three workspace views.)
 public struct GitWorkbenchView: View {
+    @ObservedObject private var store: GitWorkbenchStore
     @Environment(\.colorScheme) private var colorScheme
 
-    private let state: WorkbenchState
-    private let configuration: WorkbenchConfiguration
-
-    // NOTE (Plan 2): replaced/supplemented by `public init(store: GitWorkbenchStore, ...)`.
-    init(state: WorkbenchState, configuration: WorkbenchConfiguration = .init()) {
-        self.state = state
-        self.configuration = configuration
+    public init(store: GitWorkbenchStore) {
+        self.store = store
     }
+
+    private var state: WorkbenchState { store.state }
+    private var configuration: WorkbenchConfiguration { store.configuration }
 
     private var theme: WorkbenchTheme {
         WorkbenchTheme.resolved(for: colorScheme,
@@ -29,6 +29,7 @@ public struct GitWorkbenchView: View {
         }
         .background(theme.winBg)
         .foregroundStyle(theme.ink)
+        .task { await store.reload() }
     }
 
     private var toolbarSkeleton: some View {
@@ -74,13 +75,13 @@ public struct GitWorkbenchView: View {
     }
 }
 
-#Preview("Workbench shell — light") {
-    GitWorkbenchView(state: Fixtures.initialState)
+#Preview("Workbench shell \u{2014} light") {
+    GitWorkbenchView(store: .preview)
         .frame(width: 980, height: 600)
 }
 
-#Preview("Workbench shell — dark") {
-    GitWorkbenchView(state: Fixtures.initialState)
+#Preview("Workbench shell \u{2014} dark") {
+    GitWorkbenchView(store: .preview)
         .frame(width: 980, height: 600)
         .preferredColorScheme(.dark)
 }
