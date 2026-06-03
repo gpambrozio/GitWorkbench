@@ -70,17 +70,96 @@ public actor MockGitProvider: GitWorkbenchProvider {
         return diff
     }
 
-    // MARK: GitWorkbenchActionHandler — implemented in extension below (Task 5)
+}
 
-    public func stage(_ files: [FileChange]) async throws { fatalError("stub") }
-    public func unstage(_ files: [FileChange]) async throws { fatalError("stub") }
-    public func discard(_ file: FileChange) async throws { fatalError("stub") }
-    public func commit(message: String, staged: [FileChange]) async throws -> Commit { fatalError("stub") }
-    public func pull() async throws -> SyncResult { fatalError("stub") }
-    public func push() async throws -> SyncResult { fatalError("stub") }
-    public func fetch() async throws -> SyncResult { fatalError("stub") }
-    public func switchBranch(to branch: Branch) async throws { fatalError("stub") }
-    public func applyStash(_ stash: Stash) async throws { fatalError("stub") }
-    public func popStash(_ stash: Stash) async throws { fatalError("stub") }
-    public func dropStash(_ stash: Stash) async throws { fatalError("stub") }
+extension MockGitProvider {
+
+    public func stage(_ files: [FileChange]) async throws {
+        await pause()
+        setStaged(files.map(\.path), to: true)
+    }
+
+    public func unstage(_ files: [FileChange]) async throws {
+        await pause()
+        setStaged(files.map(\.path), to: false)
+    }
+
+    public func discard(_ file: FileChange) async throws {
+        await pause()
+        status.files.removeAll { $0.path == file.path }
+    }
+
+    public func commit(message: String, staged: [FileChange]) async throws -> Commit {
+        await pause()
+        let stagedPaths = Set(staged.map(\.path))
+        status.files.removeAll { stagedPaths.contains($0.path) }
+        status.ahead += 1
+
+        let lines = message.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let summary = lines.first ?? ""
+        let body = lines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        let new = Commit(
+            id: "mock\(commits.count)", shortSHA: "mock\(commits.count)",
+            summary: summary, body: body,
+            authorName: status.author.name, authorEmail: "you@example.com",
+            authorInitials: status.author.initials, date: "Just now", relativeDate: "moments ago",
+            refs: [.head], parents: commits.first.map { [$0.shortSHA] } ?? [],
+            files: staged
+        )
+        commits.insert(new, at: 0)
+        return new
+    }
+
+    public func pull() async throws -> SyncResult {
+        await pause()
+        let pulled = status.behind
+        status.behind = 0
+        return SyncResult(ahead: status.ahead, behind: 0,
+                          message: pulled > 0 ? "Pulled \(pulled) commit(s) from origin" : "Already up to date with origin")
+    }
+
+    public func push() async throws -> SyncResult {
+        await pause()
+        let pushed = status.ahead
+        status.ahead = 0
+        return SyncResult(ahead: 0, behind: status.behind,
+                          message: pushed > 0 ? "Pushed \(pushed) commit(s) to origin" : "Everything up to date")
+    }
+
+    public func fetch() async throws -> SyncResult {
+        await pause()
+        return SyncResult(ahead: status.ahead, behind: status.behind, message: "Up to date with origin")
+    }
+
+    public func switchBranch(to branch: Branch) async throws {
+        await pause()
+        status.currentBranch = branch.name
+        status.upstream = branch.upstream
+        branches = branches.map {
+            Branch(name: $0.name, isCurrent: $0.name == branch.name, upstream: $0.upstream)
+        }
+    }
+
+    public func applyStash(_ stash: Stash) async throws { await pause() }   // keeps the stash
+
+    public func popStash(_ stash: Stash) async throws {
+        await pause()
+        stashes.removeAll { $0.id == stash.id }
+    }
+
+    public func dropStash(_ stash: Stash) async throws {
+        await pause()
+        stashes.removeAll { $0.id == stash.id }
+    }
+
+    // MARK: Helpers
+
+    private func setStaged(_ paths: [String], to staged: Bool) {
+        let set = Set(paths)
+        status.files = status.files.map { f in
+            guard set.contains(f.path) else { return f }
+            return FileChange(id: f.id, path: f.path, status: f.status,
+                              isStaged: staged, additions: f.additions, deletions: f.deletions)
+        }
+    }
 }
