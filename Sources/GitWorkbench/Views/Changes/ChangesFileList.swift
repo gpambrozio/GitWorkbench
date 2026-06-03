@@ -36,7 +36,14 @@ struct ChangesFileList: View {
                        files: [FileChange]) -> some View {
         Section {
             if !collapsed.wrappedValue {
-                ForEach(files) { FileListRow(store: store, file: $0) }
+                ForEach(files) { file in
+                    FileListRow(store: store, file: file)
+                        // A non-both-modified file keeps the same id (its path) when it flips between
+                        // the Staged and Changes sections. In a LazyVStack with pinned headers SwiftUI
+                        // reuses the moved row's subtree and leaves the StageBox stale, so fold the
+                        // staged state into the identity to force a fresh row when it flips.
+                        .id("\(file.isStaged ? "s" : "u"):\(file.id)")
+                }
             }
         } header: {
             HStack(spacing: 6) {
