@@ -60,4 +60,16 @@ final class StatusParserTests: XCTestCase {
         XCTAssertEqual(counts["src/b.swift"]?.deletions, 18)
         XCTAssertEqual(counts["binary.png"]?.additions, 0)   // "-" (binary) → 0
     }
+
+    func test_numstatHandlesRenameTriple() {
+        // Real `git --numstat -z` renders a rename/copy as "<add>\t<del>\t" \0 old \0 new \0
+        // (empty path field, old + new as their own records). Counts must key by the NEW path.
+        let numstat = ["1\t0\t", "old.txt", "new.txt", "3\t1\tplain.swift"].joined(separator: "\u{0}") + "\u{0}"
+        let counts = NumstatParser.parse(numstat)
+        XCTAssertEqual(counts["new.txt"]?.additions, 1)
+        XCTAssertEqual(counts["new.txt"]?.deletions, 0)
+        XCTAssertNil(counts["old.txt"])      // the old path is not a key
+        XCTAssertNil(counts[""])             // counts must NOT land under the empty path field
+        XCTAssertEqual(counts["plain.swift"]?.additions, 3)   // a following normal entry still parses
+    }
 }

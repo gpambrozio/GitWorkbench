@@ -59,7 +59,10 @@ public struct CLIGitProvider: GitWorkbenchDataSource {
 
     public func loadHistory(before: Commit.ID?, limit: Int) async throws -> [Commit] {
         var args = ["log", "--format=\(Self.logFormat)", "--max-count=\(limit)"]
-        if let before { args.append("\(before)^") }
+        // Page older than `before` with `--skip=1 <before>` rather than `<before>^`: equivalent for
+        // interior commits, but returns an empty page (exit 0) at the root commit instead of
+        // `<sha>^` failing with "unknown revision" (exit 128) and throwing.
+        if let before { args += ["--skip=1", "\(before)"] }
         let out = try await runner.output(args).text
         var commits = LogParser.parse(out)
         for index in commits.indices {

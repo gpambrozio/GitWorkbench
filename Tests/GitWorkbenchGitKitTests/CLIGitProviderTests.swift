@@ -81,4 +81,27 @@ final class CLIGitProviderTests: XCTestCase {
         XCTAssertTrue(stashes[0].message.contains("wip stash"))
         XCTAssertFalse(stashes[0].files.isEmpty)
     }
+
+    func test_loadStatusCountsRenamedFile() async throws {
+        // A staged rename+edit must carry numstat counts. Regression: `--numstat -z` renders a rename
+        // as "<add>\t<del>\t" \0 old \0 new \0, and the counts were being keyed under the empty path.
+        try write("r.txt", "a\nb\nc\nd\ne\n")
+        try await git(["add", "r.txt"]); try await git(["commit", "-m", "add r"])
+        try await git(["mv", "r.txt", "r2.txt"])
+        try write("r2.txt", "a\nb\nC\nd\ne\nf\n")   // change one line + append one → high similarity → rename
+        try await git(["add", "r2.txt"])
+
+        let status = try await provider.loadStatus()
+        let renamed = status.files.first { $0.path == "r2.txt" && $0.isStaged }
+        XCTAssertNotNil(renamed, "staged rename should surface under the new path")
+        XCTAssertEqual(renamed?.status, .renamed)
+        XCTAssertGreaterThan(renamed?.additions ?? 0, 0, "renamed file must carry its numstat additions")
+    }
+
+    func test_loadHistoryPagingPastRootReturnsEmpty() async throws {
+        let commits = try await provider.loadHistory(before: nil, limit: 10)
+        XCTAssertEqual(commits.count, 1)            // setUp makes exactly one (root) commit
+        let older = try await provider.loadHistory(before: commits[0].id, limit: 10)
+        XCTAssertTrue(older.isEmpty, "paging before the root commit must return empty, not throw")
+    }
 }
