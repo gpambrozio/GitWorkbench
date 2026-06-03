@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Renders a `FileDiff` unified or split, with deleted-file and binary special cases.
 struct DiffView: View {
@@ -11,13 +12,26 @@ struct DiffView: View {
             if diff.isBinary {
                 binary
             } else if diff.file.status == .deleted {
-                deleted
+                scrollingCode(minWidth: contentMinWidth(split: false)) { deletedRows }
             } else {
-                ScrollView(.vertical) { content }
+                scrollingCode(minWidth: contentMinWidth(split: mode == .split)) { content }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme.winBg)
+    }
+
+    /// Vertical + horizontal scroll. The content is at least as wide as the longest line (so long
+    /// lines scroll instead of truncating) and at least the pane width (so short diffs still fill it).
+    private func scrollingCode<V: View>(minWidth: CGFloat, @ViewBuilder _ inner: () -> V) -> some View {
+        let inner = inner()
+        return GeometryReader { geo in
+            ScrollView([.vertical, .horizontal]) {
+                // A concrete width (not minWidth) — inside a horizontal ScrollView the proposed width
+                // is unbounded, so minWidth has nothing to floor against and the content collapses.
+                inner.frame(width: max(minWidth, geo.size.width), alignment: .topLeading)
+            }
+        }
     }
 
     private var content: some View {
@@ -31,20 +45,32 @@ struct DiffView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // Deleted file: all lines as unified rows, no headers, dimmed (diff.jsx).
-    private var deleted: some View {
-        ScrollView(.vertical) {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(diff.hunks) { hunk in
-                    ForEach(hunk.lines) { UnifiedDiffRow(line: $0) }
-                }
+    private var deletedRows: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(diff.hunks) { hunk in
+                ForEach(hunk.lines) { UnifiedDiffRow(line: $0) }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .opacity(0.92)
+    }
+
+    private var monoFont: NSFont { .monospacedSystemFont(ofSize: 12, weight: .regular) }
+
+    /// Width of the longest code line (measured once on the longest-by-character line).
+    private var maxCodeWidth: CGFloat {
+        guard let longest = diff.hunks.flatMap(\.lines).map(\.text).max(by: { $0.count < $1.count }) else { return 0 }
+        return (longest as NSString).size(withAttributes: [.font: monoFont]).width
+    }
+
+    /// Total content width = fixed gutters/signs for the mode + the code column (+ a clip-safety buffer).
+    private func contentMinWidth(split: Bool) -> CGFloat {
+        let code = maxCodeWidth + 28
+        // unified: 2 gutters (46) + sign (20) + trailing (16). split: per side gutter (40) + sign (14) + trailing (10), ×2 + divider.
+        return split ? 2 * (Tokens.splitGutterWidth + Tokens.splitSignWidth + 10 + code) + 1
+                     : Tokens.unifiedGutterWidth * 2 + Tokens.unifiedSignWidth + 16 + code
     }
 
     private var binary: some View {
