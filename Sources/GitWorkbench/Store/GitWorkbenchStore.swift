@@ -172,3 +172,66 @@ extension GitWorkbenchStore {
         }
     }
 }
+
+// MARK: - Sync & branch intents
+
+extension GitWorkbenchStore {
+
+    public func pull() async { await runSync(.pull) }
+    public func push() async { await runSync(.push) }
+    public func fetch() async { await runSync(.fetch) }
+
+    private enum SyncKind { case pull, push, fetch }
+
+    private func runSync(_ kind: SyncKind) async {
+        guard !state.isBusy else { return }
+        state.isBusy = true
+        switch kind {
+        case .pull:  state.toast = .progress("Pulling from origin\u{2026}")
+        case .push:  state.toast = .progress("Pushing to origin\u{2026}")
+        case .fetch: state.toast = .progress("Fetching from origin\u{2026}")
+        }
+        do {
+            let result: SyncResult
+            switch kind {
+            case .pull:  result = try await provider.pull()
+            case .push:  result = try await provider.push()
+            case .fetch: result = try await provider.fetch()
+            }
+            state.repo.ahead = result.ahead
+            state.repo.behind = result.behind
+            state.isBusy = false
+            state.toast = .success(result.message)
+        } catch {
+            state.isBusy = false
+            setError(mapSyncError(error, kind: kind))
+        }
+    }
+
+    private func mapSyncError(_ error: Error, kind: SyncKind) -> Error {
+        guard kind == .push else { return error }
+        let desc = ((error as? LocalizedError)?.errorDescription ?? error.localizedDescription).lowercased()
+        if desc.contains("reject") || desc.contains("non-fast-forward") {
+            return WorkbenchMessageError("Push rejected \u{2014} pull first")
+        }
+        return error
+    }
+
+    public func switchBranch(to branch: Branch) async {
+        state.branchMenuOpen = false
+        do {
+            try await provider.switchBranch(to: branch)
+            await reload()
+            state.toast = .success("Switched to \(branch.name)")
+        } catch {
+            setError(error)
+        }
+    }
+}
+
+/// A simple `LocalizedError` carrying a ready-made message.
+struct WorkbenchMessageError: LocalizedError {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var errorDescription: String? { message }
+}

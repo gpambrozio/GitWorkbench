@@ -147,3 +147,54 @@ extension StoreReducerTests {
         XCTAssertEqual(store.state.commits.count, commitsBefore)
     }
 }
+
+extension StoreReducerTests {
+    func test_pushZeroesAheadAndShowsSuccessToast() async {
+        let store = makeStore()
+        await store.reload()
+        XCTAssertEqual(store.state.repo.ahead, 2)
+        await store.push()
+        XCTAssertFalse(store.state.isBusy)
+        XCTAssertEqual(store.state.repo.ahead, 0)
+        XCTAssertEqual(store.state.toast?.style, .success)
+        XCTAssertTrue(store.state.toast!.message.contains("Pushed"))
+    }
+
+    func test_pullZeroesBehind() async {
+        let store = makeStore()
+        await store.reload()
+        await store.pull()
+        XCTAssertEqual(store.state.repo.behind, 0)
+        XCTAssertFalse(store.state.isBusy)
+    }
+
+    func test_pushShowsBusyAndProgressWhileInFlight() async {
+        let store = GitWorkbenchStore(provider: MockGitProvider(delay: .milliseconds(120)))
+        await store.reload()
+        let task = Task { await store.push() }
+        try? await Task.sleep(for: .milliseconds(30))
+        XCTAssertTrue(store.state.isBusy)
+        XCTAssertEqual(store.state.toast?.style, .progress)
+        await task.value
+        XCTAssertFalse(store.state.isBusy)
+        XCTAssertEqual(store.state.toast?.style, .success)
+    }
+
+    func test_syncErrorClearsBusyAndShowsErrorToast() async {
+        let store = GitWorkbenchStore(provider: FailingProvider())
+        await store.reload()
+        await store.push()
+        XCTAssertFalse(store.state.isBusy)
+        XCTAssertEqual(store.state.toast?.style, .error)
+    }
+
+    func test_switchBranchUpdatesCurrentReloadsAndToasts() async {
+        let store = makeStore()
+        await store.reload()
+        let main = store.state.branches.first { $0.name == "main" }!
+        await store.switchBranch(to: main)
+        XCTAssertEqual(store.state.repo.currentBranch, "main")
+        XCTAssertFalse(store.state.branchMenuOpen)
+        XCTAssertEqual(store.state.toast?.message, "Switched to main")
+    }
+}
