@@ -93,3 +93,82 @@ public final class GitWorkbenchStore: ObservableObject {
         return store
     }
 }
+
+// MARK: - Changes intents
+
+extension GitWorkbenchStore {
+
+    public func toggleStage(_ id: FileChange.ID) async {
+        guard let idx = state.repo.files.firstIndex(where: { $0.id == id }) else { return }
+        let original = state.repo.files[idx]
+        let nowStaged = !original.isStaged
+        state.repo.files[idx].isStaged = nowStaged   // optimistic
+        do {
+            if nowStaged { try await provider.stage([original]) }
+            else { try await provider.unstage([original]) }
+        } catch {
+            if let i = state.repo.files.firstIndex(where: { $0.id == id }) {
+                state.repo.files[i].isStaged = original.isStaged   // rollback
+            }
+            setError(error)
+        }
+    }
+
+    public func stageAll() async {
+        let targets = state.unstaged
+        guard !targets.isEmpty else { return }
+        let snapshot = state.repo.files
+        for i in state.repo.files.indices { state.repo.files[i].isStaged = true }
+        do { try await provider.stage(targets) }
+        catch { state.repo.files = snapshot; setError(error) }
+    }
+
+    public func unstageAll() async {
+        let targets = state.staged
+        guard !targets.isEmpty else { return }
+        let snapshot = state.repo.files
+        for i in state.repo.files.indices { state.repo.files[i].isStaged = false }
+        do { try await provider.unstage(targets) }
+        catch { state.repo.files = snapshot; setError(error) }
+    }
+
+    public func requestDiscard(_ id: FileChange.ID) {
+        state.pendingDiscard = state.repo.files.first { $0.id == id }
+    }
+
+    public func cancelDiscard() { state.pendingDiscard = nil }
+
+    public func confirmDiscard() async {
+        guard let file = state.pendingDiscard else { return }
+        state.pendingDiscard = nil
+        do {
+            try await provider.discard(file)
+            state.repo.files.removeAll { $0.id == file.id }
+            if state.selectedFileID == file.id {
+                state.selectedFileID = nil
+                state.currentDiff = nil
+            }
+            state.toast = .success("Discarded changes in \(file.name)")
+        } catch {
+            setError(error)
+        }
+    }
+
+    public func commit() async {
+        guard state.canCommit else { return }
+        let staged = state.staged
+        let message = state.commitMessage
+        do {
+            let newCommit = try await provider.commit(message: message, staged: staged)
+            state.repo.files.removeAll { $0.isStaged }
+            state.commitMessage = ""
+            state.repo.ahead += 1
+            state.commits.insert(newCommit, at: 0)
+            state.selectedFileID = nil
+            state.currentDiff = nil
+            state.toast = .success("Committed \(staged.count) file(s) \u{00B7} \u{201C}\(newCommit.summary)\u{201D}")
+        } catch {
+            setError(error)
+        }
+    }
+}
