@@ -82,7 +82,10 @@ public struct CLIGitProvider: GitWorkbenchProvider {
         case .commit(let id):
             text = try await runner.output(["show", id, "--format=", "--", request.file.path]).text
         case .stash(let id):
-            text = try await runner.output(["stash", "show", "-p", id, "--", request.file.path]).text
+            // `git stash show` does NOT accept a pathspec — `stash show -p <id> -- <path>` fails with
+            // "Too many revisions specified" (it reads <path> as a second revision). A stash entry is
+            // a commit, so diff its base (^1) against its tip for the one file, like `git show` does.
+            text = try await runner.output(["diff", "\(id)^", id, "--", request.file.path]).text
         }
         return DiffParser.parse(unifiedDiff: text, file: request.file)
     }

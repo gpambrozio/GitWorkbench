@@ -82,6 +82,17 @@ final class CLIGitProviderTests: XCTestCase {
         XCTAssertFalse(stashes[0].files.isEmpty)
     }
 
+    func test_loadDiffForStashedFile() async throws {
+        // The per-file stash diff must have hunks. Regression: `git stash show -p <id> -- <path>`
+        // fails ("Too many revisions specified") because stash show takes no pathspec.
+        try await git(["stash", "push", "-m", "wip"])          // stashes a.txt (modified) + b.txt (staged)
+        let stash = try await provider.loadStashes()[0]
+        let file = try XCTUnwrap(stash.files.first { $0.path == "a.txt" }, "stash should contain a.txt")
+        let diff = try await provider.loadDiff(DiffRequest(file: file, context: .stash(stash.id), mode: .unified))
+        XCTAssertFalse(diff.hunks.isEmpty, "a stashed file's diff should render hunks")
+        XCTAssertTrue(diff.hunks.flatMap { $0.lines }.contains { $0.kind == .addition || $0.kind == .deletion })
+    }
+
     func test_loadStatusCountsRenamedFile() async throws {
         // A staged rename+edit must carry numstat counts. Regression: `--numstat -z` renders a rename
         // as "<add>\t<del>\t" \0 old \0 new \0, and the counts were being keyed under the empty path.
