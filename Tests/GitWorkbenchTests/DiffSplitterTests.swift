@@ -51,4 +51,20 @@ final class DiffSplitterTests: XCTestCase {
         let lines = [line(.deletion, o: 1, n: nil, "x"), line(.addition, o: nil, n: 1, "y")]
         XCTAssertEqual(DiffSplitter.rows(lines).map(\.id), DiffSplitter.rows(lines).map(\.id))
     }
+
+    func test_rowIDsAreUniqueAcrossHunks() {
+        // Rows from two different hunks must not share ids — the DiffView renders all hunks' split
+        // rows in one LazyVStack, and colliding ids make the lazy stack render the duplicates blank.
+        // Regression: SplitRow.id used to be a per-hunk index that reset to 0 for every hunk.
+        let hunkA = DiffSplitter.rows([
+            line(.context, o: 1, n: 1, "a"),
+            line(.addition, o: nil, n: 2, "b"),
+        ])
+        let hunkB = DiffSplitter.rows([
+            line(.context, o: 9, n: 9, "c"),
+            line(.context, o: 10, n: 10, "d"),
+        ])
+        XCTAssertTrue(Set(hunkA.map(\.id)).isDisjoint(with: Set(hunkB.map(\.id))),
+                      "split-row ids must be globally unique across hunks")
+    }
 }
