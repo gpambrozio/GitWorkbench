@@ -13,7 +13,7 @@ struct DiffView: View {
             } else if diff.file.status == .deleted {
                 deleted
             } else {
-                ScrollView([.vertical, .horizontal]) { content }
+                ScrollView(.vertical) { content }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -36,7 +36,7 @@ struct DiffView: View {
 
     // Deleted file: all lines as unified rows, no headers, dimmed (diff.jsx).
     private var deleted: some View {
-        ScrollView([.vertical, .horizontal]) {
+        ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(diff.hunks) { hunk in
                     ForEach(hunk.lines) { UnifiedDiffRow(line: $0) }
