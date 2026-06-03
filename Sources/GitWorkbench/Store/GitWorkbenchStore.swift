@@ -243,6 +243,32 @@ extension GitWorkbenchStore {
     public func dismissToast() { state.toast = nil }
 }
 
+// MARK: - Detail-pane intents
+
+extension GitWorkbenchStore {
+    public func selectCommitFile(_ fileID: FileChange.ID) {
+        state.selectedCommitFileID = fileID
+        guard let commitID = state.selectedCommitID,
+              let file = state.commits.first(where: { $0.id == commitID })?.files.first(where: { $0.id == fileID })
+        else { return }
+        diffTask?.cancel()
+        diffTask = Task { [weak self] in await self?.loadDiff(for: file, context: .commit(commitID)) }
+    }
+
+    public func selectStashFile(_ fileID: FileChange.ID) {
+        state.selectedStashFileID = fileID
+        guard let stashID = state.selectedStashID,
+              let file = state.stashes.first(where: { $0.id == stashID })?.files.first(where: { $0.id == fileID })
+        else { return }
+        diffTask?.cancel()
+        diffTask = Task { [weak self] in await self?.loadDiff(for: file, context: .stash(stashID)) }
+    }
+
+    public func showToast(_ message: String, style: Toast.Style = .success) {
+        state.toast = Toast(message: message, style: style)
+    }
+}
+
 // MARK: - History & stash intents
 
 extension GitWorkbenchStore {
