@@ -34,7 +34,7 @@ public struct GitWorkbenchView: View {
     @ViewBuilder
     private func body(for view: WorkspaceView) -> some View {
         switch view {
-        case .changes: placeholder(IconLibrary.file, "Changes")
+        case .changes: ChangesBody(store: store)
         case .history: placeholder(IconLibrary.history, "History")
         case .stashes: placeholder(IconLibrary.folder, "Stashes")
         }
