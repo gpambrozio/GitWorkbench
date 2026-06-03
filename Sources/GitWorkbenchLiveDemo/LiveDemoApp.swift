@@ -9,6 +9,26 @@ import GitWorkbenchGitKit
 enum LiveState {
     static let store = GitWorkbenchStore(provider: CLIGitProvider(repositoryURL: repoURL))
 
+    /// Live filesystem watcher (interactive mode only). Held statically so it outlives `runWindowed`.
+    static var watcher: RepositoryWatcher?
+
+    /// Watch the working tree and reload on any change (debounced), so external edits / commits / stashes
+    /// show up without relaunching. Also refreshes the open working-tree diff via the public `select`
+    /// intent, so editing the file you're viewing updates the diff pane, not just the file list.
+    static func startWatching() {
+        guard watcher == nil else { return }
+        let watcher = RepositoryWatcher(url: repoURL) {
+            Task { @MainActor in
+                await store.reload()
+                if store.state.activeView == .changes, let id = store.state.selectedFileID {
+                    store.select(file: id)
+                }
+            }
+        }
+        self.watcher = watcher
+        watcher.start()
+    }
+
     /// First positional argument (skipping flags and the values of every value-taking flag); defaults to cwd.
     static let repoURL: URL = {
         let args = CommandLine.arguments
@@ -63,6 +83,7 @@ final class LiveDemoDelegate: NSObject, NSApplicationDelegate {
                 NSApp.windows.first?.makeKeyAndOrderFront(nil)
             }
             await LiveState.store.reload()
+            LiveState.startWatching()
         }
     }
 

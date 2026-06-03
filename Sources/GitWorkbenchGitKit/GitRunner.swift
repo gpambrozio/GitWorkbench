@@ -24,6 +24,12 @@ public struct GitRunner: Sendable {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: gitPath)
         process.arguments = ["-C", repositoryURL.path] + arguments
+        // Don't let read-only commands (`status`, `diff`) take optional locks to refresh the index's
+        // stat cache — that writes `.git/index`, which a filesystem watcher would see as a change and
+        // reload in a loop. This is the same setting IDEs use when polling git.
+        var environment = ProcessInfo.processInfo.environment
+        environment["GIT_OPTIONAL_LOCKS"] = "0"
+        process.environment = environment
         let outPipe = Pipe(), errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
