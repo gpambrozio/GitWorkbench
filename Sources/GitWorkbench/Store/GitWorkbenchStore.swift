@@ -236,6 +236,13 @@ struct WorkbenchMessageError: LocalizedError {
     var errorDescription: String? { message }
 }
 
+// MARK: - Chrome intents
+
+extension GitWorkbenchStore {
+    public func setBranchMenuOpen(_ open: Bool) { state.branchMenuOpen = open }
+    public func dismissToast() { state.toast = nil }
+}
+
 // MARK: - History & stash intents
 
 extension GitWorkbenchStore {
