@@ -1,0 +1,143 @@
+import Foundation
+import GitWorkbench
+
+/// A `GitWorkbenchProvider` backed by the system `git` CLI. Read side here; actions in an extension.
+public struct CLIGitProvider: GitWorkbenchDataSource {
+    let runner: GitRunner
+    static let logFormat = "%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1f%P%x1f%D%x1f%s%x1f%b%x1e"
+
+    public init(repositoryURL: URL, gitPath: String = "/usr/bin/git") {
+        self.runner = GitRunner(repositoryURL: repositoryURL, gitPath: gitPath)
+    }
+
+    /// Throws `GitError.notARepository` unless the directory is a git work tree.
+    public func validate() async throws {
+        let result = try await runner.run(["rev-parse", "--is-inside-work-tree"])
+        guard result.exitCode == 0,
+              result.text.trimmingCharacters(in: .whitespacesAndNewlines) == "true" else {
+            throw GitError.notARepository(runner.repositoryURL.path)
+        }
+    }
+
+    // MARK: GitWorkbenchDataSource
+
+    public func loadStatus() async throws -> RepositoryStatus {
+        let porcelain = try await runner.output(["status", "--porcelain=v2", "--branch", "-z"]).text
+        let parsed = StatusParser.parse(porcelain: porcelain)
+        async let unstagedText = runner.output(["diff", "--numstat", "-z"]).text
+        async let stagedText = runner.output(["diff", "--cached", "--numstat", "-z"]).text
+        let unstaged = NumstatParser.parse(try await unstagedText)
+        let staged = NumstatParser.parse(try await stagedText)
+        let files = parsed.files.map { file -> FileChange in
+            let counts = file.isStaged ? staged[file.path] : unstaged[file.path]
+            return FileChange(id: file.id, path: file.path, status: file.status, isStaged: file.isStaged,
+                              additions: counts?.additions ?? 0, deletions: counts?.deletions ?? 0)
+        }
+        let toplevel = ((try? await runner.output(["rev-parse", "--show-toplevel"]).text) ?? runner.repositoryURL.path)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return RepositoryStatus(
+            repositoryName: URL(fileURLWithPath: toplevel).lastPathComponent,
+            currentBranch: parsed.branch, upstream: parsed.upstream,
+            ahead: parsed.ahead, behind: parsed.behind, files: files, author: try await author())
+    }
+
+    public func loadBranches() async throws -> [Branch] {
+        let out = try await runner.output(["for-each-ref",
+            "--format=%(refname:short)\u{1f}%(upstream:short)\u{1f}%(HEAD)", "refs/heads"]).text
+        return RefParser.parse(out)
+    }
+
+    public func loadStashes() async throws -> [Stash] {
+        let out = try await runner.output(["stash", "list", "--format=%gd\u{1f}%s\u{1f}%cr"]).text
+        let branch = (try? await currentBranch()) ?? ""
+        var stashes = StashParser.parse(out, branch: branch)
+        for index in stashes.indices {
+            stashes[index].files = (try? await stashFiles(stashes[index].ref)) ?? []
+        }
+        return stashes
+    }
+
+    public func loadHistory(before: Commit.ID?, limit: Int) async throws -> [Commit] {
+        var args = ["log", "--format=\(Self.logFormat)", "--max-count=\(limit)"]
+        if let before { args.append("\(before)^") }
+        let out = try await runner.output(args).text
+        var commits = LogParser.parse(out)
+        for index in commits.indices {
+            commits[index].files = (try? await commitFiles(commits[index].id)) ?? []
+            if commits[index].relativeDate.isEmpty { commits[index].relativeDate = commits[index].date }
+        }
+        return commits
+    }
+
+    public func loadDiff(_ request: DiffRequest) async throws -> FileDiff {
+        let text: String
+        switch request.context {
+        case .workingTree(let staged):
+            let args = staged ? ["diff", "--cached", "--", request.file.path]
+                              : ["diff", "--", request.file.path]
+            text = try await runner.output(args).text
+        case .commit(let id):
+            text = try await runner.output(["show", id, "--format=", "--", request.file.path]).text
+        case .stash(let id):
+            text = try await runner.output(["stash", "show", "-p", id, "--", request.file.path]).text
+        }
+        return DiffParser.parse(unifiedDiff: text, file: request.file)
+    }
+
+    // MARK: Helpers
+
+    func author() async throws -> Author {
+        let name = ((try? await runner.output(["config", "user.name"]).text) ?? "You")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let safe = name.isEmpty ? "You" : name
+        return Author(name: safe, initials: LogParser.initials(for: safe))
+    }
+
+    func currentBranch() async throws -> String {
+        try await runner.output(["rev-parse", "--abbrev-ref", "HEAD"]).text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func commitFiles(_ sha: String) async throws -> [FileChange] {
+        async let nameStatus = runner.output(["show", sha, "--name-status", "--format=", "-z"]).text
+        async let numstat = runner.output(["show", sha, "--numstat", "--format=", "-z"]).text
+        let counts = NumstatParser.parse(try await numstat)
+        return Self.parseNameStatus(try await nameStatus).map { status, path in
+            FileChange(path: path, status: status,
+                       additions: counts[path]?.additions ?? 0, deletions: counts[path]?.deletions ?? 0)
+        }
+    }
+
+    func stashFiles(_ ref: String) async throws -> [FileChange] {
+        async let nameStatus = runner.output(["stash", "show", "--name-status", "-z", ref]).text
+        async let numstat = runner.output(["stash", "show", "--numstat", "-z", ref]).text
+        let counts = NumstatParser.parse(try await numstat)
+        return Self.parseNameStatus(try await nameStatus).map { status, path in
+            FileChange(path: path, status: status,
+                       additions: counts[path]?.additions ?? 0, deletions: counts[path]?.deletions ?? 0)
+        }
+    }
+
+    /// Parses `--name-status -z`: each record is a STATUS code then its path(s) (rename = old, new).
+    static func parseNameStatus(_ output: String) -> [(FileStatus, String)] {
+        let tokens = output.split(separator: "\u{0}", omittingEmptySubsequences: true).map(String.init)
+        var result: [(FileStatus, String)] = []
+        var i = 0
+        while i < tokens.count {
+            let code = tokens[i]; i += 1
+            guard i < tokens.count else { break }
+            let first = code.first ?? "M"
+            if first == "R" || first == "C" {            // rename/copy: <old> <new> — keep the new path
+                i += 1                                     // skip old
+                if i < tokens.count { result.append((.renamed, tokens[i])); i += 1 }
+            } else {
+                result.append((mapStatus(first), tokens[i])); i += 1
+            }
+        }
+        return result
+    }
+
+    private static func mapStatus(_ c: Character) -> FileStatus {
+        switch c { case "A": .added; case "D": .deleted; case "R", "C": .renamed; case "U": .conflicted; default: .modified }
+    }
+}
