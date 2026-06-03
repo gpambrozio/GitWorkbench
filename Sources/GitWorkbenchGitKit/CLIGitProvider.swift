@@ -2,7 +2,7 @@ import Foundation
 import GitWorkbench
 
 /// A `GitWorkbenchProvider` backed by the system `git` CLI. Read side here; actions in an extension.
-public struct CLIGitProvider: GitWorkbenchDataSource {
+public struct CLIGitProvider: GitWorkbenchProvider {
     let runner: GitRunner
     static let logFormat = "%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1f%P%x1f%D%x1f%s%x1f%b%x1e"
 
