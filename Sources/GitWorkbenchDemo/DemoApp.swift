@@ -34,8 +34,10 @@ final class DemoAppDelegate: NSObject, NSApplicationDelegate {
     /// Drives the store into the requested state, renders, captures the window content to a PNG, and exits.
     private func runSnapshot(path: String, view: String?, select: String?, mode: String?) {
         NSApp.setActivationPolicy(.accessory)   // no Dock icon / minimal disturbance
+        let dark = CommandLine.arguments.contains("--dark")
         let store = DemoState.store
         Task { @MainActor in
+            NSApp.windows.first?.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             await store.reload()
             if let mode { store.setDiffMode(mode == "unified" ? .unified : .split) }
             switch view {
