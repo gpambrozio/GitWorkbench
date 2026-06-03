@@ -32,12 +32,16 @@ struct DetailFileRow: View {
     }
 }
 
-/// The "N changed files" header + the rows.
+/// The "N changed files" header + the rows. The row list is capped and scrolls beyond
+/// `maxVisibleRows` so a commit/stash with many files can't grow the pane unbounded (which
+/// would push the diff off-screen and overflow the whole window).
 struct DetailFilesBlock: View {
     @Environment(\.workbenchTheme) private var theme
     let files: [FileChange]
     let selectedID: FileChange.ID?
     let onSelect: (FileChange.ID) -> Void
+
+    private let maxVisibleRows = 8
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,9 +50,15 @@ struct DetailFilesBlock: View {
                 .foregroundStyle(theme.ink3)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16).padding(.vertical, 6)
-            ForEach(files) { file in
-                DetailFileRow(file: file, selected: file.id == selectedID) { onSelect(file.id) }
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(files) { file in
+                        DetailFileRow(file: file, selected: file.id == selectedID) { onSelect(file.id) }
+                    }
+                }
             }
+            // Hug content up to the cap, then scroll — keeps the diff area visible below.
+            .frame(height: CGFloat(min(files.count, maxVisibleRows)) * Tokens.detailFileRowHeight)
         }
         .background(theme.sidebar)
         .overlay(alignment: .bottom) { Rectangle().fill(theme.sep).frame(height: 1) }
