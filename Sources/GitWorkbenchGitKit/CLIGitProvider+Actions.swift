@@ -14,7 +14,8 @@ extension CLIGitProvider {
 
     public func discard(_ file: FileChange) async throws {
         if file.status == .untracked {
-            _ = try await runner.output(["clean", "-f", "--", file.path])
+            // `-d` so a fully-untracked directory (reported as a single entry) is removed too, not just files.
+            _ = try await runner.output(["clean", "-fd", "--", file.path])
         } else {
             _ = try await runner.output(["restore", "--", file.path])
         }
@@ -24,7 +25,9 @@ extension CLIGitProvider {
         _ = try await runner.output(["commit", "-m", message])
         let out = try await runner.output(["log", "-1", "--format=\(Self.logFormat)"]).text
         guard var commit = LogParser.parse(out).first else {
-            throw GitError.commandFailed(arguments: ["log", "-1"], code: 0, stderr: "could not read new commit")
+            // The commit itself succeeded; only the read-back parse failed. Use -1 (not 0) so the
+            // error doesn't claim a zero/success exit code.
+            throw GitError.commandFailed(arguments: ["log", "-1"], code: -1, stderr: "could not read new commit")
         }
         commit.files = (try? await commitFiles(commit.id)) ?? staged
         if commit.relativeDate.isEmpty { commit.relativeDate = commit.date }

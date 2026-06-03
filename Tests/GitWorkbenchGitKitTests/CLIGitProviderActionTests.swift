@@ -49,6 +49,13 @@ final class CLIGitProviderActionTests: XCTestCase {
         XCTAssertEqual(contents, "v1\n")
     }
 
+    func test_discardRemovesUntrackedFile() async throws {
+        let scratch = repo.appendingPathComponent("scratch.txt")
+        try "temp\n".write(to: scratch, atomically: true, encoding: .utf8)
+        try await provider.discard(FileChange(path: "scratch.txt", status: .untracked))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.path))   // clean -fd removed it
+    }
+
     func test_switchBranch() async throws {
         _ = try await GitRunner(repositoryURL: repo).output(["branch", "dev"])
         try await provider.switchBranch(to: Branch(name: "dev"))
@@ -66,5 +73,16 @@ final class CLIGitProviderActionTests: XCTestCase {
         try await provider.dropStash(stash)
         let afterDrop = try await provider.loadStashes().count
         XCTAssertEqual(afterDrop, 0)
+    }
+
+    func test_stashPopRestoresAndRemoves() async throws {
+        try "wip2\n".write(to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        _ = try await GitRunner(repositoryURL: repo).output(["stash", "push", "-m", "wip2"])
+        let stash = try await provider.loadStashes()[0]
+        try await provider.popStash(stash)
+        let restored = try String(contentsOf: repo.appendingPathComponent("a.txt"), encoding: .utf8)
+        XCTAssertEqual(restored, "wip2\n")                       // working change restored
+        let count = try await provider.loadStashes().count
+        XCTAssertEqual(count, 0)                                 // and the stash is gone
     }
 }

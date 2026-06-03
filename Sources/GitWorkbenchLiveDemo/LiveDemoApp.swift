@@ -9,10 +9,10 @@ import GitWorkbenchGitKit
 enum LiveState {
     static let store = GitWorkbenchStore(provider: CLIGitProvider(repositoryURL: repoURL))
 
-    /// First positional argument (skipping flags and the values of `--shot`/`--view`); defaults to cwd.
+    /// First positional argument (skipping flags and the values of every value-taking flag); defaults to cwd.
     static let repoURL: URL = {
         let args = CommandLine.arguments
-        let valuedFlags: Set<String> = ["--shot", "--view"]
+        let valuedFlags: Set<String> = ["--shot", "--view", "--select", "--mode"]
         var positionals: [String] = []
         var i = 1
         while i < args.count {
