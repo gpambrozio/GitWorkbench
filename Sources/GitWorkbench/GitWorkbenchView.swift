@@ -35,15 +35,9 @@ public struct GitWorkbenchView: View {
     private func body(for view: WorkspaceView) -> some View {
         switch view {
         case .changes: ChangesBody(store: store)
-        case .history: placeholder(IconLibrary.history, "History")
-        case .stashes: placeholder(IconLibrary.folder, "Stashes")
+        case .history: HistoryBody(store: store)
+        case .stashes: StashBody(store: store)
         }
-    }
-
-    // Temporary — replaced by the real Changes/History/Stash views in Plans 7–8.
-    private func placeholder(_ icon: String, _ title: String) -> some View {
-        EmptyState(icon: icon, title: title, subtitle: "View coming in the next plan.")
-            .background(theme.winBg)
     }
 
     @ViewBuilder
