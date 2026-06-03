@@ -243,7 +243,7 @@ git commit -m "Model: add DiffBuilder (compact patch -> DiffHunk) with tests"
 > The mock provider's `loadDiff` returns these. They mirror the hunks in `reference/src/gitdata.js` exactly (so the eventual renderer matches the prototype). Build them with `DiffBuilder.hunk(...)`. Diffs are keyed by `(context, path)`.
 
 **Reference mapping — read `reference/src/gitdata.js` and port every hunk:**
-- In `gitdata.js`, each file/commit-file/stash-file has `hunks: [hunk(oldStart, newStart, [lines])]`. Port each to `DiffBuilder.hunk(oldStart: <o>, newStart: <n>, [<lines>])`, copying the prefixed line strings **verbatim** (including the leading `+`/`-`/space, and unescaping JS string escapes — e.g. `"\\x1b"` in JS becomes Swift `"\u{1b}"`, `\\n` stays as literal backslash-n inside the diff text where the JS had `\\n`). Preserve every line.
+- In `gitdata.js`, each file/commit-file/stash-file has `hunks: [hunk(oldStart, newStart, [lines])]`. Port each to `DiffBuilder.hunk(oldStart: <o>, newStart: <n>, [<lines>])`, copying each prefixed line **verbatim** as displayed source text (keep the leading `+`/`-`/space). Escaping: `gitdata.js` uses single-quoted JS strings, so inner double-quotes are bare — escape them as `\"` in the Swift double-quoted literal. Where the JS shows a doubled backslash (`\\x1b`, `\\n`), that is ONE literal backslash in the diff text (the diff renders TypeScript *source*, e.g. the literal text `\x1b[90m`) — reproduce it in Swift as a doubled backslash (`\\x1b`, `\\n`); do NOT turn it into a real ESC/newline character. Backticks and `${…}` are literal text — copy as-is. Preserve every line.
 - Working-tree files come from the top-level `files` array (7 files; `sync.ts` has 2 hunks, the rest 1 each). `poller.ts` is the deleted file; `.env.example` is untracked.
 - Commit diffs come from each commit's `files` (via `cf(path, status, add, del, hunks)`); stash diffs from each stash's `files`.
 
@@ -379,7 +379,7 @@ public enum FixtureDiffs {
         ],
         // PORT the remaining 6 working files verbatim from gitdata.js `files`:
         //   "src/index.ts"           → hunk(3, 3, [...])
-        //   "src/utils/logger.ts"    → hunk(0, 1, [...])   (note: JS "\\x1b" → Swift "\u{1b}")
+        //   "src/utils/logger.ts"    → hunk(0, 1, [...])   (COLORS lines are literal source: JS "\\x1b[90m" is the text \x1b[90m, so write Swift "\\x1b[90m" — a literal backslash, NOT a real ESC char)
         //   "package.json"           → hunk(2, 2, [...])
         //   "README.md"              → hunk(18, 18, [...])
         //   "src/legacy/poller.ts"   → hunk(1, 0, [...])   (deleted file, all "-")
