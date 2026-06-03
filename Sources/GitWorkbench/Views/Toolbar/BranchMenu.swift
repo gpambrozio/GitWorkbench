@@ -20,21 +20,8 @@ struct BranchMenu: View {
                     behind: store.state.repo.behind
                 ) { Task { await store.switchBranch(to: branch) } }
             }
-
-            Divider().padding(.vertical, 4)
-
-            Button {} label: {
-                HStack(spacing: 8) {
-                    Image(systemName: IconLibrary.plus)
-                    Text("New branch from HEAD\u{2026}")
-                }
-                .font(.system(size: 12.5))
-                .foregroundStyle(theme.ink2)
-                .padding(.init(top: 6, leading: 14, bottom: 12, trailing: 14))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
         }
+        .padding(.bottom, 6)
         .frame(width: 280)
     }
 }
