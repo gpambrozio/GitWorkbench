@@ -36,9 +36,33 @@ final class LiveDemoDelegate: NSObject, NSApplicationDelegate {
                         select: arg(args, "--select"),
                         mode: arg(args, "--mode"))
         } else {
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate(ignoringOtherApps: true)
-            NSApp.windows.first?.makeKeyAndOrderFront(nil)
+            runWindowed()
+        }
+    }
+
+    /// Interactive mode. The `WindowGroup` window is not reliably created for this executable target,
+    /// so if none has appeared shortly after launch we host the view in an explicit window. Either way
+    /// we kick off the initial load (the live store starts empty until `reload`).
+    private func runWindowed() {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            if NSApp.windows.first(where: { $0.contentView != nil }) == nil {
+                let size = NSRect(x: 0, y: 0, width: 1200, height: 740)
+                let hosting = NSHostingView(rootView: GitWorkbenchView(store: LiveState.store)
+                    .frame(minWidth: size.width, minHeight: size.height))
+                hosting.frame = size
+                let window = NSWindow(contentRect: size, styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                                      backing: .buffered, defer: false)
+                window.title = "GitWorkbench (Live)"
+                window.contentView = hosting
+                window.center()
+                window.makeKeyAndOrderFront(nil)
+            } else {
+                NSApp.windows.first?.makeKeyAndOrderFront(nil)
+            }
+            await LiveState.store.reload()
         }
     }
 
@@ -49,13 +73,24 @@ final class LiveDemoDelegate: NSObject, NSApplicationDelegate {
         return args[i + 1]
     }
 
-    /// Drives the store into the requested state, renders, captures the window content to a PNG, and exits.
+    /// Drives the store into the requested state, renders, captures the view to a PNG, and exits.
+    ///
+    /// `--shot` hosts the SwiftUI view in an explicit `NSWindow` (via `NSHostingView`) rather than
+    /// relying on the `WindowGroup` window — that window is not reliably instantiated for this
+    /// executable target, whereas an explicit window lays out and renders deterministically.
     private func runSnapshot(path: String, view: String?, select: String?, mode: String?) {
         NSApp.setActivationPolicy(.accessory)   // no Dock icon / minimal disturbance
         let dark = CommandLine.arguments.contains("--dark")
         let store = LiveState.store
+        let size = NSRect(x: 0, y: 0, width: 1200, height: 740)
+        let hosting = NSHostingView(rootView: GitWorkbenchView(store: store).frame(width: size.width, height: size.height))
+        hosting.frame = size
+        let window = NSWindow(contentRect: size, styleMask: [.titled], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        window.contentView = hosting
+        window.makeKeyAndOrderFront(nil)
+
         Task { @MainActor in
-            NSApp.windows.first?.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             await store.reload()
             if let mode { store.setDiffMode(mode == "unified" ? .unified : .split) }
             switch view {
@@ -71,10 +106,9 @@ final class LiveDemoDelegate: NSObject, NSApplicationDelegate {
                     store.select(file: f.id)
                 }
             }
-            // Let async diff loads + SwiftUI layout settle before capturing. Real git is slower than
-            // the mock provider, so allow a little more time than DemoApp.
-            try? await Task.sleep(for: .milliseconds(1500))
-            capture(to: path)
+            // Let the async diff load + SwiftUI layout settle, then capture the hosting view.
+            try? await Task.sleep(for: .milliseconds(1600))
+            capture(view: hosting, to: path)
             NSApp.terminate(nil)
         }
     }
@@ -84,11 +118,9 @@ final class LiveDemoDelegate: NSObject, NSApplicationDelegate {
         return ids.first
     }
 
-    private func capture(to path: String) {
-        guard let window = NSApp.windows.first(where: { $0.contentView != nil }),
-              let view = window.contentView,
-              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
-            FileHandle.standardError.write(Data("SHOT-FAILED no window\n".utf8)); return
+    private func capture(view: NSView, to path: String) {
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
+            FileHandle.standardError.write(Data("SHOT-FAILED no bitmap\n".utf8)); return
         }
         view.cacheDisplay(in: view.bounds, to: rep)
         if let png = rep.representation(using: .png, properties: [:]) {
