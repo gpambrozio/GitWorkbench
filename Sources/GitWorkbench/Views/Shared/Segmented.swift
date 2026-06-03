@@ -34,6 +34,7 @@ struct Segmented<Value: Hashable>: View {
                                 .shadow(color: Color.black.opacity(0.14), radius: 1, y: 1)
                         }
                     }
+                    .contentShape(Rectangle())   // whole segment is tappable, not just the icon
                 }
                 .buttonStyle(.plain)
             }
