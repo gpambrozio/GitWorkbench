@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Git Workbench — Design Specification</title>
+<style>
+  :root {
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    --mono: ui-monospace, "SF Mono", "Menlo", "Monaco", monospace;
+    --ink: #1d1d1f; --ink2: #54545c; --ink3: #8a8a93;
+    --accent: #7c5ce0; --accentDeep: #6a49d4; --accentSoft: rgba(124,92,224,0.11);
+    --sep: rgba(0,0,0,0.10); --sep2: rgba(0,0,0,0.06);
+    --paper: #ffffff; --bg: #f4f3f1;
+    --mod:#c8852c; --add:#2e9e5b; --del:#d1453b; --ren:#2a6fdb; --unt:#8a8f98;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+  body { line-height: 1.6; }
+  .page { max-width: 860px; margin: 0 auto; padding: 0 32px 120px; }
+
+  /* ── cover ─────────────────────────────────── */
+  .cover { padding: 92px 0 54px; border-bottom: 1px solid var(--sep); margin-bottom: 8px; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--accentDeep); }
+  .cover h1 { font-size: 46px; line-height: 1.08; letter-spacing: -1px; margin: 16px 0 0; font-weight: 700; }
+  .cover .sub { font-size: 17px; color: var(--ink2); margin-top: 16px; max-width: 620px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 26px; margin-top: 30px; }
+  .meta div { font-size: 12.5px; }
+  .meta .k { color: var(--ink3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10.5px; }
+  .meta .v { color: var(--ink); font-weight: 600; margin-top: 2px; }
+
+  /* ── sections ──────────────────────────────── */
+  section { padding-top: 52px; }
+  .num { font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600; }
+  h2 { font-size: 27px; letter-spacing: -0.4px; margin: 6px 0 18px; font-weight: 700; }
+  h3 { font-size: 16.5px; margin: 30px 0 10px; font-weight: 700; letter-spacing: -0.2px; }
+  p { margin: 0 0 14px; color: #29292e; }
+  p.lead { font-size: 16px; color: var(--ink2); }
+  a { color: var(--accentDeep); }
+  code { font-family: var(--mono); font-size: 0.86em; background: rgba(0,0,0,0.05); padding: 1.5px 6px; border-radius: 5px; }
+  kbd { font-family: var(--font); font-size: 12px; font-weight: 600; background: var(--paper); border: 1px solid var(--sep); border-bottom-width: 2px; border-radius: 6px; padding: 1.5px 7px; color: var(--ink); white-space: nowrap; }
+
+  ul { margin: 0 0 14px; padding-left: 0; list-style: none; }
+  ul li { position: relative; padding-left: 22px; margin-bottom: 8px; color: #29292e; }
+  ul li::before { content: ""; position: absolute; left: 4px; top: 10px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+
+  /* card */
+  .card { background: var(--paper); border: 1px solid var(--sep); border-radius: 14px; padding: 22px 24px; margin: 18px 0; }
+  .card h3 { margin-top: 0; }
+
+  /* layout diagram */
+  .diagram { background: var(--paper); border: 1px solid var(--sep); border-radius: 14px; overflow: hidden; margin: 20px 0; }
+  .dwin { display: flex; flex-direction: column; }
+  .dbar { height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #ececef; border-bottom: 1px solid var(--sep); font-size: 11px; color: var(--ink3); font-weight: 600; }
+  .lights { display: flex; gap: 6px; } .lights i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+  .dbody { display: flex; height: 230px; }
+  .dcol { padding: 12px; font-size: 11px; display: flex; flex-direction: column; gap: 6px; }
+  .dcol .ct { font-size: 9.5px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--ink3); }
+  .dcol .cn { font-size: 11.5px; color: var(--ink2); }
+  .dcol .w { margin-top: auto; font-family: var(--mono); font-size: 10px; color: var(--accentDeep); font-weight: 600; }
+  .d-rail { width: 26%; background: #ebebee; border-right: 1px solid var(--sep); }
+  .d-list { width: 34%; background: #f3f3f5; border-right: 1px solid var(--sep); }
+  .d-diff { flex: 1; background: #fff; }
+  .chip { display: inline-block; background: var(--accentSoft); color: var(--accentDeep); font-size: 10px; font-weight: 700; border-radius: 5px; padding: 2px 7px; }
+
+  /* table */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--sep2); vertical-align: top; }
+  th { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink3); font-weight: 700; border-bottom: 1px solid var(--sep); }
+  tr td:first-child { font-weight: 600; white-space: nowrap; }
+  td code { white-space: nowrap; }
+
+  /* status legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+  .glyph { display: inline-flex; align-items: center; gap: 9px; background: var(--paper); border: 1px solid var(--sep); border-radius: 10px; padding: 9px 14px 9px 10px; font-size: 13px; }
+  .g { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 700; font-size: 13px; color: #fff; }
+  .glyph b { font-weight: 600; } .glyph span { color: var(--ink3); font-size: 12px; }
+
+  /* tokens */
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 12px; margin: 16px 0; }
+  .sw { border: 1px solid var(--sep); border-radius: 11px; overflow: hidden; background: var(--paper); }
+  .sw .chipc { height: 54px; } .sw .lbl { padding: 8px 10px; }
+  .sw .lbl b { display: block; font-size: 12px; } .sw .lbl code { font-size: 10.5px; background: none; padding: 0; color: var(--ink3); }
+
+  .kbds { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; margin: 16px 0; }
+  .kbds .row { display: flex; align-items: center; gap: 12px; font-size: 13.5px; padding: 6px 0; border-bottom: 1px solid var(--sep2); }
+  .kbds .row .d { color: var(--ink2); flex: 1; }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--accentSoft); border-radius: 0 10px 10px 0; padding: 14px 18px; margin: 18px 0; font-size: 13.5px; color: #34343a; }
+  .callout b { color: var(--accentDeep); }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 680px) { .two, .kbds { grid-template-columns: 1fr; } .cover h1 { font-size: 34px; } }
+
+  .toc { font-size: 13.5px; columns: 2; column-gap: 40px; margin: 4px 0 0; }
+  .toc a { display: block; padding: 5px 0; color: var(--ink2); text-decoration: none; border-bottom: 1px solid var(--sep2); }
+  .toc a:hover { color: var(--accentDeep); }
+  .toc a .tn { font-family: var(--mono); color: var(--accent); font-size: 12px; margin-right: 10px; }
+
+  @media print {
+    body { background: #fff; }
+    .page { max-width: none; padding: 0 12px; }
+    section { break-inside: avoid; }
+    .card, .diagram, .glyph, .sw { break-inside: avoid; }
+    .cover { padding-top: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Design Specification</div>
+    <h1>Git Workbench</h1>
+    <p class="sub">A three-pane git changes view for the coding-assistant helper app. Branch &amp; workspace navigation, staging, and review live side by side — the macOS-native take on a pro git client.</p>
+    <div class="meta">
+      <div><div class="k">Platform</div><div class="v">macOS 14+ · AppKit / SwiftUI</div></div>
+      <div><div class="k">Direction</div><div class="v">C — Workbench (3-pane)</div></div>
+      <div><div class="k">Status</div><div class="v">Ready for build</div></div>
+      <div><div class="k">Version</div><div class="v">Draft 1 · Jun 2026</div></div>
+    </div>
+  </header>
+
+  <nav style="padding-top:34px;">
+    <div class="num">Contents</div>
+    <div class="toc">
+      <a href="#overview"><span class="tn">01</span>Overview &amp; principles</a>
+      <a href="#layout"><span class="tn">02</span>Window &amp; layout</a>
+      <a href="#anatomy"><span class="tn">03</span>Anatomy of the panes</a>
+      <a href="#status"><span class="tn">04</span>File status model</a>
+      <a href="#interactions"><span class="tn">05</span>Interactions</a>
+      <a href="#diff"><span class="tn">06</span>Diff viewer</a>
+      <a href="#states"><span class="tn">07</span>States &amp; edge cases</a>
+      <a href="#tokens"><span class="tn">08</span>Visual tokens</a>
+      <a href="#shortcuts"><span class="tn">09</span>Keyboard shortcuts</a>
+    </div>
+  </nav>
+
+  <!-- 01 -->
+  <section id="overview">
+    <div class="num">01</div>
+    <h2>Overview &amp; principles</h2>
+    <p class="lead">The Workbench shows the working-tree state of the active repository and lets the user stage, review, and commit changes without leaving the helper app. It mirrors the mental model of Tower / Fork / GitHub Desktop, rendered with native macOS materials.</p>
+    <div class="card">
+      <h3>Principles</h3>
+      <ul>
+        <li><b>Native first.</b> System grays, vibrancy/translucency on popovers, SF font, standard traffic-light chrome. It should feel like it shipped with the OS, not like a web view.</li>
+        <li><b>Everything visible, nothing modal.</b> Branches, file list, and diff are always on screen. Switching files or branches never opens a new window.</li>
+        <li><b>Staging is the spine.</b> The staged ⁄ unstaged split is the primary axis. Commit is always one glance away in the same column as the files it acts on.</li>
+        <li><b>Read before you write.</b> The diff pane is the largest region — reviewing changes is the most common task, committing is the rare one.</li>
+      </ul>
+    </div>
+    <div class="callout"><b>Scope note.</b> This is a plain git view — no assistant-authored-change labelling or AI commit messages in this spec. That can layer on later without disturbing the structure described here.</div>
+  </section>
+
+  <!-- 02 -->
+  <section id="layout">
+    <div class="num">02</div>
+    <h2>Window &amp; layout</h2>
+    <p>A single resizable window with a unified toolbar and three vertical panes. The two left panes have fixed default widths and are independently collapsible / resizable via the dividers; the diff pane is fluid and absorbs remaining width.</p>
+
+    <div class="diagram">
+      <div class="dwin">
+        <div class="dbar">
+          <span class="lights"><i style="background:#fc625d"></i><i style="background:#fdbc40"></i><i style="background:#34c84a"></i></span>
+          <span style="margin-left:6px;">Unified toolbar — repo name · Pull / Push / Fetch · branch · History · Stash · diff mode</span>
+        </div>
+        <div class="dbody">
+          <div class="dcol d-rail">
+            <span class="ct">Pane 1 — Rail</span>
+            <span class="cn">Workspace</span>
+            <span class="cn">Branches</span>
+            <span class="cn">Remotes</span>
+            <span class="w">218 px</span>
+          </div>
+          <div class="dcol d-list">
+            <span class="ct">Pane 2 — Changes</span>
+            <span class="cn">▸ Staged</span>
+            <span class="cn">▸ Changes</span>
+            <span class="cn" style="margin-top:auto;">Commit composer (docked)</span>
+            <span class="w">320 px</span>
+          </div>
+          <div class="dcol d-diff">
+            <span class="ct">Pane 3 — Diff</span>
+            <span class="cn">File header + actions</span>
+            <span class="cn">Unified / split hunks</span>
+            <span class="w">fluid · min 420 px</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr><th>Region</th><th>Default</th><th>Min</th><th>Resize</th></tr></thead>
+      <tbody>
+        <tr><td>Toolbar height</td><td><code>52 px</code></td><td>—</td><td>Fixed</td></tr>
+        <tr><td>Rail (pane 1)</td><td><code>218 px</code></td><td><code>180 px</code></td><td>Divider · collapsible</td></tr>
+        <tr><td>Changes (pane 2)</td><td><code>320 px</code></td><td><code>260 px</code></td><td>Divider</td></tr>
+        <tr><td>Diff (pane 3)</td><td>Fluid</td><td><code>420 px</code></td><td>Absorbs remainder</td></tr>
+        <tr><td>Window</td><td><code>1300 × 800</code></td><td><code>900 × 560</code></td><td>Free</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 03 -->
+  <section id="anatomy">
+    <div class="num">03</div>
+    <h2>Anatomy of the panes</h2>
+
+    <h3>Toolbar</h3>
+    <p>Unified titlebar (no separate title row). Left cluster carries the traffic lights + repository name against a <code>1px</code> divider. The center-left group holds the remote actions and branch switcher; the trailing group holds the diff-mode segmented control.</p>
+    <ul>
+      <li><b>Pull / Push</b> show pending counts inline (e.g. <code>Pull 1</code>, <code>Push 2</code>) when behind/ahead.</li>
+      <li><b>Fetch</b> is a no-count refresh of remote refs.</li>
+      <li><b>Branch pill</b> shows a branch glyph + current branch name + chevron; opens the branch menu.</li>
+      <li><b>History</b> and <b>Stash</b> open their respective workspace views (rail selection mirrors this).</li>
+      <li><b>Segmented control</b> toggles Unified ↔ Split diff; persists per-repo.</li>
+    </ul>
+
+    <h3>Pane 1 — Rail</h3>
+    <p>Grouped source list on the deepest gray. Three sections: <b>Workspace</b> (Changes · History · Stashes, each with a count), <b>Branches</b> (local branches; the current one is bold with a <span class="chip">HEAD</span> tag), and <b>Remotes</b> (expandable to remote-tracking branches). Single-click selects; a branch row offers Switch / Merge / Rename / Delete on right-click.</p>
+
+    <h3>Pane 2 — Changes list + commit</h3>
+    <p>Two collapsible groups — <b>Staged</b> then <b>Changes</b> — each with a count badge and a bulk action (<i>Stage all</i> / <i>Unstage all</i>). Section headers are sticky while scrolling. Each row shows: a stage checkbox, the status glyph, filename, dimmed directory, and a <code>+adds / −dels</code> chip that swaps to a Discard affordance on hover. The commit composer is docked to the bottom of this pane so it never scrolls away.</p>
+
+    <h3>Pane 3 — Diff</h3>
+    <p>A header strip (status glyph · filename · path · status word · Stage/Unstage · Discard) above the scrolling hunk view. Empty when no file is selected.</p>
+  </section>
+
+  <!-- 04 -->
+  <section id="status">
+    <div class="num">04</div>
+    <h2>File status model</h2>
+    <p>Every changed file carries one status. The glyph is a rounded square: outlined in the list when unselected, filled when the row is selected, in the status color.</p>
+    <div class="legend">
+      <div class="glyph"><span class="g" style="background:var(--mod)">M</span><b>Modified</b><span>tracked, edited</span></div>
+      <div class="glyph"><span class="g" style="background:var(--add)">A</span><b>Added</b><span>new, staged</span></div>
+      <div class="glyph"><span class="g" style="background:var(--del)">D</span><b>Deleted</b><span>removed</span></div>
+      <div class="glyph"><span class="g" style="background:var(--ren)">R</span><b>Renamed</b><span>moved / renamed</span></div>
+      <div class="glyph"><span class="g" style="background:var(--unt)">U</span><b>Untracked</b><span>new, unstaged</span></div>
+    </div>
+    <p>Line stats render in monospace with tabular figures: additions in green <code>+24</code>, deletions in red <code>−6</code>. A file may appear in <i>both</i> Staged and Changes groups when it has partially-staged hunks (future: hunk-level staging).</p>
+  </section>
+
+  <!-- 05 -->
+  <section id="interactions">
+    <div class="num">05</div>
+    <h2>Interactions</h2>
+    <table>
+      <thead><tr><th>Action</th><th>Trigger</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Select file</td><td>Click row (either group)</td><td>Loads its diff in pane 3; row highlights in accent.</td></tr>
+        <tr><td>Stage / unstage</td><td>Click row checkbox, or Stage/Unstage in diff header</td><td>File moves between Changes ↔ Staged; counts &amp; commit button update.</td></tr>
+        <tr><td>Stage / unstage all</td><td>Group-header action</td><td>Moves every file in that group at once.</td></tr>
+        <tr><td>Discard</td><td>Hover row → discard icon, or diff-header Discard</td><td>Confirmation popover; on confirm the file leaves the list and its working-tree changes are reverted. Destructive — never silent.</td></tr>
+        <tr><td>Edit message</td><td>Type in composer</td><td>First line = summary. Commit button enables only with ≥1 staged file <i>and</i> non-empty message.</td></tr>
+        <tr><td>Commit</td><td>Commit button or <kbd>⌘ ↵</kbd></td><td>Creates commit, clears staged group + message, increments <i>ahead</i>, toast confirms.</td></tr>
+        <tr><td>Switch branch</td><td>Branch pill / rail branch row</td><td>Menu with current marked; switching updates HEAD, refreshes the working tree, toast confirms.</td></tr>
+        <tr><td>Pull / Push / Fetch</td><td>Toolbar buttons</td><td>In-progress spinner toast → result toast; ahead/behind counts reconcile. Buttons disable while busy.</td></tr>
+        <tr><td>Toggle diff mode</td><td>Segmented control</td><td>Re-renders current diff Unified ↔ Split; preference persists.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout"><b>Confirmation rule.</b> Only irreversible operations (Discard, branch delete, force-push) prompt. Stage/unstage/commit are instant and reversible, so they never interrupt.</div>
+  </section>
+
+  <!-- 06 -->
+  <section id="diff">
+    <div class="num">06</div>
+    <h2>Diff viewer</h2>
+    <div class="two">
+      <div class="card">
+        <h3>Unified</h3>
+        <p>Single column. Two gutter columns (old line ⁄ new line), a sign column (<code>+ − ·</code>), then code. Added lines tint green, removed tint red, each with a 3px colored edge bar. Default for narrow widths.</p>
+      </div>
+      <div class="card">
+        <h3>Split</h3>
+        <p>Side-by-side old vs new with an aligned center divider. Changed cells tint; empty counterpart cells get a faint hatched fill. Best on wide windows for line-level comparison.</p>
+      </div>
+    </div>
+    <ul>
+      <li>Hunk headers (<code>@@ −14,8 +14,9 @@</code>) separate regions with a faint accent-tinted band.</li>
+      <li>Code is set in the system monospace at <code>12 / 20 px</code>; gutters use the tertiary ink and are non-selectable.</li>
+      <li>Deleted files render their content as a fully-removed block; binary/image files fall back to a before→after metadata row (future).</li>
+      <li>Large files lazy-render hunks; "Load more" appears past a threshold rather than blocking on the full patch.</li>
+    </ul>
+  </section>
+
+  <!-- 07 -->
+  <section id="states">
+    <div class="num">07</div>
+    <h2>States &amp; edge cases</h2>
+    <table>
+      <thead><tr><th>State</th><th>Treatment</th></tr></thead>
+      <tbody>
+        <tr><td>Clean tree</td><td>Changes list shows a centered "Working tree clean" empty state; diff pane echoes it; commit disabled.</td></tr>
+        <tr><td>No file selected</td><td>Diff pane shows file glyph + "Select a file to view changes".</td></tr>
+        <tr><td>Nothing staged</td><td>Commit button reads <i>Commit to {branch}</i>, disabled and gray.</td></tr>
+        <tr><td>Detached HEAD</td><td>Branch pill shows short SHA + a "detached" tag; commit warns it won't be on a branch.</td></tr>
+        <tr><td>Merge conflict</td><td>Conflicted files get a <code>!</code> glyph (orange-red) and sort to the top; diff shows conflict markers with "Use ours / Use theirs" actions.</td></tr>
+        <tr><td>Sync in flight</td><td>Toolbar remote buttons disable; spinner toast; result toast on completion.</td></tr>
+        <tr><td>Push rejected</td><td>Error toast (red) suggesting Pull first; no data lost.</td></tr>
+        <tr><td>Very long paths</td><td>Directory truncates with a middle ellipsis; filename never truncates before the directory.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 08 -->
+  <section id="tokens">
+    <div class="num">08</div>
+    <h2>Visual tokens</h2>
+    <h3>Color</h3>
+    <div class="swatches">
+      <div class="sw"><div class="chipc" style="background:#7c5ce0"></div><div class="lbl"><b>Accent</b><code>#7C5CE0</code></div></div>
+      <div class="sw"><div class="chipc" style="background:#6a49d4"></div><div class="lbl"><b>Accent deep</b><code>#6A49D4</code></div></div>
+      <div class="sw"><div class="chipc" style="background:#2e9e5b"></div><div class="lbl"><b>Add</b><code>#2E9E5B</code></div></div>
+      <div class="sw"><div class="chipc" style="background:#d1453b"></div><div class="lbl"><b>Delete</b><code>#D1453B</code></div></div>
+      <div class="sw"><div class="chipc" style="background:#c8852c"></div><div class="lbl"><b>Modified</b><code>#C8852C</code></div></div>
+      <div class="sw"><div class="chipc" style="background:#2a6fdb"></div><div class="lbl"><b>Renamed</b><code>#2A6FDB</code></div></div>
+      <div class="sw"><div class="chipc" style="background:#f3f3f5;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)"></div><div class="lbl"><b>Sidebar</b><code>#F3F3F5</code></div></div>
+      <div class="sw"><div class="chipc" style="background:#ececef;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)"></div><div class="lbl"><b>Titlebar</b><code>#ECECEF</code></div></div>
+      <div class="sw"><div class="chipc" style="background:#1d1d1f"></div><div class="lbl"><b>Ink</b><code>#1D1D1F</code></div></div>
+    </div>
+    <div class="callout">In a real build, map these to <b>semantic system colors</b> (<code>NSColor.controlAccentColor</code>, <code>.windowBackgroundColor</code>, <code>.separatorColor</code>) so the UI tracks the user's accent and Dark Mode automatically. The hex values above define the light-mode purple identity when the system accent isn't adopted.</div>
+
+    <h3>Type &amp; metrics</h3>
+    <table>
+      <tbody>
+        <tr><td>UI text</td><td>SF Pro Text — rows <code>12.5px</code>, headers <code>11px / 700 / uppercase</code></td></tr>
+        <tr><td>Code &amp; stats</td><td>SF Mono — diff <code>12 / 20px</code>, tabular figures for counts</td></tr>
+        <tr><td>Row height</td><td>File rows <code>28px</code> · rail rows <code>28px</code> · diff line <code>20px</code></td></tr>
+        <tr><td>Radius</td><td>Rows <code>6px</code> · buttons <code>7px</code> · cards/popovers <code>11–14px</code></td></tr>
+        <tr><td>Status glyph</td><td><code>15–16px</code> rounded square, <code>1.25px</code> inset stroke when outlined</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 09 -->
+  <section id="shortcuts">
+    <div class="num">09</div>
+    <h2>Keyboard shortcuts</h2>
+    <div class="kbds">
+      <div class="row"><kbd>⌘ ↵</kbd><span class="d">Commit staged changes</span></div>
+      <div class="row"><kbd>⌘ ⇧ S</kbd><span class="d">Stage all</span></div>
+      <div class="row"><kbd>⌘ ⌫</kbd><span class="d">Discard selected file</span></div>
+      <div class="row"><kbd>⌘ ⇧ K</kbd><span class="d">Push</span></div>
+      <div class="row"><kbd>⌘ ⇧ P</kbd><span class="d">Pull</span></div>
+      <div class="row"><kbd>⌘ R</kbd><span class="d">Fetch / refresh</span></div>
+      <div class="row"><kbd>↑ ↓</kbd><span class="d">Move selection in file list</span></div>
+      <div class="row"><kbd>Space</kbd><span class="d">Toggle stage on selected file</span></div>
+      <div class="row"><kbd>⌘ B</kbd><span class="d">Open branch switcher</span></div>
+      <div class="row"><kbd>⌘ ⌥ D</kbd><span class="d">Toggle Unified / Split</span></div>
+    </div>
+    <p style="margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid var(--sep);padding-top:18px;">Companion to the interactive prototype — <code>Git Workbench Prototype.html</code>. All metrics reflect the prototype's rendered values and are the source of truth for the build.</p>
+  </section>
+
+</div>
+</body>
+</html>
