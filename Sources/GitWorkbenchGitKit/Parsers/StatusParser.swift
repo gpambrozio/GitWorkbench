@@ -37,8 +37,11 @@ public enum StatusParser {
             } else if record.hasPrefix("? ") {
                 files.append(FileChange(path: String(record.dropFirst(2)), status: .untracked, isStaged: false))
             } else if record.hasPrefix("u ") {
-                if let path = record.split(separator: " ").last.map(String.init) {
-                    files.append(FileChange(path: path, status: .conflicted, isStaged: false))
+                // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path> — path is field 10+.
+                let fields = record.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+                if fields.count > 10 {
+                    files.append(FileChange(path: fields[10...].joined(separator: " "),
+                                            status: .conflicted, isStaged: false))
                 }
             }
         }
