@@ -149,6 +149,58 @@ extension StoreReducerTests {
 }
 
 extension StoreReducerTests {
+    func test_selectCommitSelectsFirstFileAndLoadsDiff() async {
+        let store = makeStore()
+        await store.reload()
+        let commit = store.state.commits.first!
+        await store.selectCommit(commit.id)
+        XCTAssertEqual(store.state.selectedCommitID, commit.id)
+        XCTAssertEqual(store.state.selectedCommitFileID, commit.files.first?.id)
+        XCTAssertNotNil(store.state.currentDiff)
+    }
+
+    func test_selectStashSelectsFirstFileAndLoadsDiff() async {
+        let store = makeStore()
+        await store.reload()
+        let stash = store.state.stashes[0]
+        await store.selectStash(stash.id)
+        XCTAssertEqual(store.state.selectedStashID, stash.id)
+        XCTAssertEqual(store.state.selectedStashFileID, stash.files.first?.id)
+        XCTAssertNotNil(store.state.currentDiff)
+    }
+
+    func test_applyStashKeepsItAndToasts() async {
+        let store = makeStore()
+        await store.reload()
+        let stash = store.state.stashes[0]
+        await store.applyStash(stash.id)
+        XCTAssertEqual(store.state.stashes.count, 2)   // kept
+        XCTAssertTrue(store.state.toast!.message.contains("Applied"))
+    }
+
+    func test_popStashRemovesAndReselectsNext() async {
+        let store = makeStore()
+        await store.reload()
+        let first = store.state.stashes[0]
+        await store.popStash(first.id)
+        XCTAssertEqual(store.state.stashes.count, 1)
+        XCTAssertNil(store.state.stashes.first { $0.id == first.id })
+        XCTAssertEqual(store.state.selectedStashID, store.state.stashes.first?.id)
+        XCTAssertEqual(store.state.toast?.style, .success)
+    }
+
+    func test_dropLastStashClearsSelection() async {
+        let store = makeStore()
+        await store.reload()
+        await store.dropStash(store.state.stashes[0].id)
+        await store.dropStash(store.state.stashes[0].id)
+        XCTAssertTrue(store.state.stashes.isEmpty)
+        XCTAssertNil(store.state.selectedStashID)
+        XCTAssertNil(store.state.selectedStashFileID)
+    }
+}
+
+extension StoreReducerTests {
     func test_pushZeroesAheadAndShowsSuccessToast() async {
         let store = makeStore()
         await store.reload()

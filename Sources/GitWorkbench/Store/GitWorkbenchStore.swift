@@ -235,3 +235,85 @@ struct WorkbenchMessageError: LocalizedError {
     init(_ message: String) { self.message = message }
     var errorDescription: String? { message }
 }
+
+// MARK: - History & stash intents
+
+extension GitWorkbenchStore {
+
+    public func selectCommit(_ id: Commit.ID) async {
+        state.selectedCommitID = id
+        guard let commit = state.commits.first(where: { $0.id == id }) else { return }
+        state.selectedCommitFileID = commit.files.first?.id
+        if let first = commit.files.first {
+            await loadDiff(for: first, context: .commit(id))
+        } else {
+            state.currentDiff = nil
+        }
+    }
+
+    public func selectStash(_ id: Stash.ID) async {
+        state.selectedStashID = id
+        guard let stash = state.stashes.first(where: { $0.id == id }) else { return }
+        state.selectedStashFileID = stash.files.first?.id
+        if let first = stash.files.first {
+            await loadDiff(for: first, context: .stash(id))
+        } else {
+            state.currentDiff = nil
+        }
+    }
+
+    public func applyStash(_ id: Stash.ID) async {
+        guard let stash = state.stashes.first(where: { $0.id == id }) else { return }
+        do {
+            try await provider.applyStash(stash)
+            state.toast = .success("Applied \(stash.ref) to working tree")
+        } catch {
+            setError(error)
+        }
+    }
+
+    public func popStash(_ id: Stash.ID) async {
+        guard let stash = state.stashes.first(where: { $0.id == id }) else { return }
+        do {
+            try await provider.popStash(stash)
+            removeStashAndReselect(id)
+            state.toast = .success("Popped \(stash.ref) \u{2014} \u{201C}\(stash.message)\u{201D}")
+        } catch {
+            setError(error)
+        }
+    }
+
+    public func dropStash(_ id: Stash.ID) async {
+        guard let stash = state.stashes.first(where: { $0.id == id }) else { return }
+        do {
+            try await provider.dropStash(stash)
+            removeStashAndReselect(id)
+            state.toast = .success("Dropped \(stash.ref) \u{2014} \u{201C}\(stash.message)\u{201D}")
+        } catch {
+            setError(error)
+        }
+    }
+
+    private func removeStashAndReselect(_ id: Stash.ID) {
+        guard let idx = state.stashes.firstIndex(where: { $0.id == id }) else { return }
+        state.stashes.remove(at: idx)
+        guard !state.stashes.isEmpty else {
+            state.selectedStashID = nil
+            state.selectedStashFileID = nil
+            state.currentDiff = nil
+            return
+        }
+        let nextIdx = min(idx, state.stashes.count - 1)
+        let next = state.stashes[nextIdx]
+        state.selectedStashID = next.id
+        state.selectedStashFileID = next.files.first?.id
+        if let first = next.files.first {
+            diffTask?.cancel()
+            diffTask = Task { [weak self] in
+                await self?.loadDiff(for: first, context: .stash(next.id))
+            }
+        } else {
+            state.currentDiff = nil
+        }
+    }
+}
