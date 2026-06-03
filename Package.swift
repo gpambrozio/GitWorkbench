@@ -8,6 +8,7 @@ let package = Package(
         .library(name: "GitWorkbench", targets: ["GitWorkbench"]),
         .executable(name: "GitWorkbenchDemo", targets: ["GitWorkbenchDemo"]),
         .library(name: "GitWorkbenchGitKit", targets: ["GitWorkbenchGitKit"]),
+        .executable(name: "GitWorkbenchLiveDemo", targets: ["GitWorkbenchLiveDemo"]),
     ],
     targets: [
         .target(
@@ -32,6 +33,11 @@ let package = Package(
         .testTarget(
             name: "GitWorkbenchGitKitTests",
             dependencies: ["GitWorkbenchGitKit", "GitWorkbench"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .executableTarget(
+            name: "GitWorkbenchLiveDemo",
+            dependencies: ["GitWorkbench", "GitWorkbenchGitKit"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]
