@@ -12,43 +12,38 @@ struct DiffView: View {
             if diff.isBinary {
                 binary
             } else if diff.file.status == .deleted {
-                scrollingCode(minWidth: contentMinWidth(split: false)) { deletedRows }
+                scrollingCode(minWidth: contentMinWidth) { deletedRows }
+            } else if mode == .split {
+                // Split owns its own horizontal scrolling: gutters/signs/divider/headers stay pinned and
+                // only the code columns slide, synced across both sides. `.id` resets that horizontal
+                // offset (and its scroll catcher) whenever the file changes.
+                SplitDiffBody(diff: diff).id(diff.file.id)
             } else {
-                // `.id(mode)` rebuilds the diff on a mode switch — the LazyVStack won't reliably swap
-                // split rows for unified rows in place (it leaves a corrupted split/unified mix).
-                scrollingCode(minWidth: contentMinWidth(split: mode == .split)) { content }
-                    .id(mode)
+                scrollingCode(minWidth: contentMinWidth) { unifiedRows }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme.winBg)
     }
 
-    /// Vertical + horizontal scroll. The content is at least as wide as the longest line (so long
-    /// lines scroll instead of truncating) and at least the pane width (so short diffs still fill it).
+    /// Vertical + horizontal scroll for the single-column (unified / deleted) layouts. The content is
+    /// at least as wide as the longest line (so long lines scroll instead of truncating) and at least
+    /// the pane width (so short diffs still fill it). Separate `minHeight` top-aligns short diffs.
     private func scrollingCode<V: View>(minWidth: CGFloat, @ViewBuilder _ inner: () -> V) -> some View {
         let inner = inner()
         return GeometryReader { geo in
             ScrollView([.vertical, .horizontal]) {
-                // Concrete width (not minWidth) — in a horizontal ScrollView the proposed width is
-                // unbounded, so minWidth has nothing to floor against and the column collapses.
-                // Separate minHeight = viewport so a short diff fills from the top (not centered);
-                // a tall diff exceeds it and scrolls. (width+minHeight can't be one .frame call.)
                 inner.frame(width: max(minWidth, geo.size.width), alignment: .topLeading)
                     .frame(minHeight: geo.size.height, alignment: .topLeading)
             }
         }
     }
 
-    private var content: some View {
+    private var unifiedRows: some View {
         LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(diff.hunks) { hunk in
                 HunkHeaderBand(text: hunk.header)
-                if mode == .split {
-                    ForEach(DiffSplitter.rows(hunk.lines)) { SplitDiffRow(row: $0) }
-                } else {
-                    ForEach(hunk.lines) { UnifiedDiffRow(line: $0) }
-                }
+                ForEach(hunk.lines) { UnifiedDiffRow(line: $0) }
             }
         }
     }
@@ -63,20 +58,11 @@ struct DiffView: View {
         .opacity(0.92)
     }
 
-    private var monoFont: NSFont { .monospacedSystemFont(ofSize: 12, weight: .regular) }
-
-    /// Width of the longest code line (measured once on the longest-by-character line).
-    private var maxCodeWidth: CGFloat {
-        guard let longest = diff.hunks.flatMap(\.lines).map(\.text).max(by: { $0.count < $1.count }) else { return 0 }
-        return (longest as NSString).size(withAttributes: [.font: monoFont]).width
-    }
-
-    /// Total content width = fixed gutters/signs for the mode + the code column (+ a clip-safety buffer).
-    private func contentMinWidth(split: Bool) -> CGFloat {
-        let code = maxCodeWidth + 28
-        // unified: 2 gutters (46) + sign (20) + trailing (16). split: per side gutter (40) + sign (14) + trailing (10), ×2 + divider.
-        return split ? 2 * (Tokens.splitGutterWidth + Tokens.splitSignWidth + 10 + code) + 1
-                     : Tokens.unifiedGutterWidth * 2 + Tokens.unifiedSignWidth + 16 + code
+    /// Total content width for the single-column layouts = fixed gutters + sign + the code column
+    /// (+ a clip-safety buffer).
+    private var contentMinWidth: CGFloat {
+        let code = DiffMetrics.maxCodeWidth(diff) + 28
+        return Tokens.unifiedGutterWidth * 2 + Tokens.unifiedSignWidth + 16 + code
     }
 
     private var binary: some View {
