@@ -45,4 +45,14 @@ final class DiffParserTests: XCTestCase {
         let diff = DiffParser.parse(unifiedDiff: "", file: FileChange(path: "x", status: .modified))
         XCTAssertTrue(diff.hunks.isEmpty)
     }
+
+    func test_trailingNewlineDoesNotAddPhantomLine() {
+        // Real `git diff` output is newline-terminated; the trailing empty split element must NOT
+        // become a phantom blank context line on the last hunk.
+        let withNewline = "@@ -1,2 +1,2 @@\n-old\n+new\n context\n"
+        let diff = DiffParser.parse(unifiedDiff: withNewline, file: FileChange(path: "x", status: .modified))
+        XCTAssertEqual(diff.hunks.count, 1)
+        XCTAssertEqual(diff.hunks[0].lines.map(\.kind), [.deletion, .addition, .context])
+        XCTAssertEqual(diff.hunks[0].lines.count, 3)   // no phantom 4th line
+    }
 }

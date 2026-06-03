@@ -30,10 +30,9 @@ public enum DiffParser {
                 if line.hasPrefix("\\") { continue }
                 if line.hasPrefix("+") || line.hasPrefix("-") || line.hasPrefix(" ") {
                     rawLines.append(line)
-                } else if line.isEmpty {
-                    rawLines.append(" ")   // a bare empty line in the body is a blank context line
                 } else {
-                    // a new file header (diff --git ...) ends the hunk
+                    // An empty line (trailing-newline split artifact) or a new file header ends the
+                    // hunk. Genuine blank context lines arrive as " " (caught above), never "".
                     flush()
                 }
             }
