@@ -1,0 +1,66 @@
+import Foundation
+
+/// The full host integration surface: a data source plus an action handler.
+public protocol GitWorkbenchProvider: GitWorkbenchDataSource, GitWorkbenchActionHandler {}
+
+/// Reads repository state. All methods run off the main actor; the provider is `Sendable`.
+public protocol GitWorkbenchDataSource: Sendable {
+    /// Working-tree status: branch, ahead/behind, staged + unstaged files.
+    func loadStatus() async throws -> RepositoryStatus
+    /// Commit history for the current branch (newest first). `before` pages older than that commit.
+    func loadHistory(before: Commit.ID?, limit: Int) async throws -> [Commit]
+    /// Stash entries (index 0 newest).
+    func loadStashes() async throws -> [Stash]
+    /// Local branches for the switcher.
+    func loadBranches() async throws -> [Branch]
+    /// The diff for one file in a given context (working tree, a commit, or a stash).
+    func loadDiff(_ request: DiffRequest) async throws -> FileDiff
+}
+
+/// Performs git operations on behalf of the UI.
+public protocol GitWorkbenchActionHandler: Sendable {
+    func stage(_ files: [FileChange]) async throws
+    func unstage(_ files: [FileChange]) async throws
+    func discard(_ file: FileChange) async throws
+    func commit(message: String, staged: [FileChange]) async throws -> Commit
+
+    func pull() async throws -> SyncResult
+    func push() async throws -> SyncResult
+    func fetch() async throws -> SyncResult
+    func switchBranch(to branch: Branch) async throws
+
+    func applyStash(_ stash: Stash) async throws
+    func popStash(_ stash: Stash) async throws
+    func dropStash(_ stash: Stash) async throws
+}
+
+/// Identifies which diff to load.
+public struct DiffRequest: Sendable {
+    public enum Context: Sendable {
+        case workingTree(staged: Bool)
+        case commit(Commit.ID)
+        case stash(Stash.ID)
+    }
+    public var file: FileChange
+    public var context: Context
+    public var mode: DiffMode   // a hint; the renderer can re-derive split from unified
+
+    public init(file: FileChange, context: Context, mode: DiffMode) {
+        self.file = file
+        self.context = context
+        self.mode = mode
+    }
+}
+
+/// The result of a pull/push/fetch.
+public struct SyncResult: Sendable {
+    public var ahead: Int
+    public var behind: Int
+    public var message: String   // e.g. "Pushed 2 commits to origin"
+
+    public init(ahead: Int, behind: Int, message: String) {
+        self.ahead = ahead
+        self.behind = behind
+        self.message = message
+    }
+}
