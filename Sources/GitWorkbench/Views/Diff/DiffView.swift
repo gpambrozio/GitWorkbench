@@ -14,7 +14,10 @@ struct DiffView: View {
             } else if diff.file.status == .deleted {
                 scrollingCode(minWidth: contentMinWidth(split: false)) { deletedRows }
             } else {
+                // `.id(mode)` rebuilds the diff on a mode switch — the LazyVStack won't reliably swap
+                // split rows for unified rows in place (it leaves a corrupted split/unified mix).
                 scrollingCode(minWidth: contentMinWidth(split: mode == .split)) { content }
+                    .id(mode)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
