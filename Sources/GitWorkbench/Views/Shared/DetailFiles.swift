@@ -12,13 +12,17 @@ struct DetailFileRow: View {
         Button(action: action) {
             HStack(spacing: 9) {
                 StatusGlyph(status: file.status, size: 15)
-                Text(file.name).font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.ink).lineLimit(1)
+                Text(file.name).font(.system(size: 12.5, weight: .medium)).foregroundStyle(theme.ink)
+                    .lineLimit(1).layoutPriority(1)
                 if !file.directory.isEmpty {
                     Text(file.directory).font(.system(size: 11.5)).foregroundStyle(theme.ink3)
                         .lineLimit(1).truncationMode(.middle)
                 }
                 Spacer(minLength: 6)
+                // Stats stay visible as the pane narrows — the name + path truncate instead.
                 StatChips(additions: file.additions, deletions: file.deletions)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(2)
             }
             .padding(.horizontal, 16)
             .frame(height: Tokens.detailFileRowHeight)
