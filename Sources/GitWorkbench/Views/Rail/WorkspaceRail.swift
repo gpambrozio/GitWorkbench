@@ -19,9 +19,11 @@ struct WorkspaceRail: View {
                 railHeader("BRANCHES")
                 ForEach(s.branches) { branch in
                     RailItem(icon: IconLibrary.branch, title: branch.name, count: nil,
-                             selected: false, current: branch.name == s.repo.currentBranch) {
+                             selected: false, current: branch.name == s.repo.currentBranch,
+                             activateOnDoubleClick: true) {
                         Task { await store.switchBranch(to: branch) }
                     }
+                    .help("Double-click to switch to \(branch.name)")
                 }
 
                 railHeader("REMOTES")
@@ -55,41 +57,51 @@ private struct RailItem: View {
     let selected: Bool
     var current: Bool = false
     var indent: CGFloat = 0
+    /// When true the row activates on double-click (single clicks do nothing) — used for branches so a
+    /// stray click doesn't switch. Default rows activate on a single click.
+    var activateOnDoubleClick: Bool = false
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 12))
-                    .foregroundStyle(selected ? .white : (current ? theme.accent : theme.ink2))
-                Text(title)
-                    .font(.system(size: 12.5, weight: current ? .bold : .medium))
-                    .foregroundStyle(selected ? .white : theme.ink)
-                    .lineLimit(1)
-                Spacer(minLength: 6)
-                if current && !selected {
-                    Text("HEAD")
-                        .font(.system(size: 9.5, weight: .bold))
-                        .foregroundStyle(theme.accentDeep)
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(theme.accentSoft, in: RoundedRectangle(cornerRadius: 4))
-                }
-                if let count {
-                    Text("\(count)")
-                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(selected ? Color.white.opacity(0.85) : theme.ink3)
-                }
+        Group {
+            if activateOnDoubleClick {
+                label.onTapGesture(count: 2, perform: action)
+            } else {
+                Button(action: action) { label }.buttonStyle(.plain)
             }
-            .padding(.leading, 8 + indent).padding(.trailing, 8)
-            .frame(height: Tokens.railRowHeight)
-            .frame(maxWidth: .infinity)
-            .background(rowBackground, in: RoundedRectangle(cornerRadius: Tokens.rowRadius, style: .continuous))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .onHover { hover = $0 }
         .padding(.horizontal, Tokens.railInsetH)
+    }
+
+    private var label: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundStyle(selected ? .white : (current ? theme.accent : theme.ink2))
+            Text(title)
+                .font(.system(size: 12.5, weight: current ? .bold : .medium))
+                .foregroundStyle(selected ? .white : theme.ink)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            if current && !selected {
+                Text("HEAD")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundStyle(theme.accentDeep)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(theme.accentSoft, in: RoundedRectangle(cornerRadius: 4))
+            }
+            if let count {
+                Text("\(count)")
+                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(selected ? Color.white.opacity(0.85) : theme.ink3)
+            }
+        }
+        .padding(.leading, 8 + indent).padding(.trailing, 8)
+        .frame(height: Tokens.railRowHeight)
+        .frame(maxWidth: .infinity)
+        .background(rowBackground, in: RoundedRectangle(cornerRadius: Tokens.rowRadius, style: .continuous))
+        .contentShape(Rectangle())
     }
 
     private var rowBackground: Color {
