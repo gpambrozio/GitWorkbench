@@ -138,7 +138,10 @@ struct RootView: View {
 }
 
 @MainActor
-final class LiveDemoDelegate: NSObject, NSApplicationDelegate {
+final class LiveDemoDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    /// The AppKit-owned Theme submenu (see `installThemeMenu`). Held so `menuNeedsUpdate` can target it.
+    private var themeMenu: NSMenu?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--shot"), i + 1 < args.count {
@@ -172,8 +175,48 @@ final class LiveDemoDelegate: NSObject, NSApplicationDelegate {
             } else {
                 NSApp.windows.first?.makeKeyAndOrderFront(nil)
             }
+            installThemeMenu()
             await AppModel.shared.start()
         }
+    }
+
+    /// Build and install an AppKit "Theme" menu. The SwiftUI `.commands` menu can't drive the checkmark
+    /// here: this executable's `WindowGroup` window never materializes (we host the view in an explicit
+    /// `NSHostingView` window instead), so the command scene that owns the menu stays dormant and never
+    /// re-evaluates when the theme changes — the mark froze on the launch-time theme. An AppKit menu whose
+    /// `menuNeedsUpdate(_:)` reads the live `themeName` on every open sidesteps that dead scene.
+    private func installThemeMenu() {
+        guard let mainMenu = NSApp.mainMenu else { return }
+        // Idempotent: drop any prior Theme menu (ours, or a leftover SwiftUI one) before reinstalling.
+        if let stale = mainMenu.items.first(where: { $0.title == "Theme" }) { mainMenu.removeItem(stale) }
+        let menu = NSMenu(title: "Theme")
+        menu.autoenablesItems = false
+        menu.delegate = self
+        for theme in DemoThemes.all {
+            let item = NSMenuItem(title: theme.name, action: #selector(selectTheme(_:)), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        }
+        let top = NSMenuItem(title: "Theme", action: nil, keyEquivalent: "")
+        top.submenu = menu
+        if let windowIndex = mainMenu.items.firstIndex(where: { $0.title == "Window" }) {
+            mainMenu.insertItem(top, at: windowIndex)   // conventional slot: just before Window
+        } else {
+            mainMenu.addItem(top)
+        }
+        themeMenu = menu
+    }
+
+    /// Apply the picked theme. The checkmark follows on the menu's next open via `menuNeedsUpdate`.
+    @objc private func selectTheme(_ sender: NSMenuItem) {
+        AppModel.shared.applyTheme(named: sender.title)
+    }
+
+    /// Refresh the Theme menu's checkmarks from the live `themeName` each time it's about to open.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === themeMenu else { return }
+        let current = AppModel.shared.themeName
+        for item in menu.items { item.state = (item.title == current) ? .on : .off }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
@@ -253,15 +296,6 @@ struct GitWorkbenchLiveDemoApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("Open Repository\u{2026}") { AppModel.shared.openWithPanel() }
                     .keyboardShortcut("o", modifiers: .command)
-            }
-            CommandMenu("Theme") {
-                Picker("Theme", selection: Binding(
-                    get: { AppModel.shared.themeName },
-                    set: { AppModel.shared.applyTheme(named: $0) }
-                )) {
-                    ForEach(DemoThemes.all) { Text($0.name).tag($0.name) }
-                }
-                .pickerStyle(.inline)
             }
         }
     }
