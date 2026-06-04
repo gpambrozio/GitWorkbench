@@ -3,6 +3,7 @@ import SwiftUI
 /// The History workspace: commit list (360) + commit detail.
 struct HistoryBody: View {
     @ObservedObject var store: GitWorkbenchStore
+    @EnvironmentObject private var layout: ColumnLayout
     @Environment(\.workbenchTheme) private var theme
 
     var body: some View {
@@ -26,9 +27,10 @@ struct HistoryBody: View {
                     }
                 }
             }
-            .frame(width: Tokens.historyListWidth)
+            .frame(width: layout.historyListWidth)
             .background(theme.sidebar)
-            .overlay(alignment: .trailing) { Rectangle().fill(theme.sep).frame(width: 1) }
+
+            ResizeDivider(width: $layout.historyListWidth, range: layout.historyListRange)
 
             Group {
                 if let commit = store.state.commits.first(where: { $0.id == store.state.selectedCommitID }) {

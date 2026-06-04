@@ -18,7 +18,16 @@ final class AppModel: ObservableObject {
     private init() {
         let url = Self.initialRepoURL
         repoURL = url
-        store = GitWorkbenchStore(provider: CLIGitProvider(repositoryURL: url))
+        store = Self.makeStore(for: url)
+    }
+
+    /// A store whose configuration opts into persistence, so resized column widths survive relaunches.
+    /// One key for the whole demo → column sizes are shared across repositories.
+    private static func makeStore(for url: URL) -> GitWorkbenchStore {
+        var configuration = WorkbenchConfiguration()
+        configuration.persistenceKey = "LiveDemo"
+        configuration.layoutStore = .userDefaults
+        return GitWorkbenchStore(provider: CLIGitProvider(repositoryURL: url), configuration: configuration)
     }
 
     /// Initial load + start watching (interactive mode).
@@ -47,7 +56,7 @@ final class AppModel: ObservableObject {
         watcher?.stop()
         watcher = nil
         repoURL = url
-        store = GitWorkbenchStore(provider: CLIGitProvider(repositoryURL: url))
+        store = Self.makeStore(for: url)
         Task { @MainActor in
             await store.reload()
             startWatching()
@@ -86,6 +95,20 @@ final class AppModel: ObservableObject {
         let path = positionals.first ?? FileManager.default.currentDirectoryPath
         return URL(fileURLWithPath: path)
     }
+}
+
+extension WorkbenchLayoutStore {
+    /// Demo persistence backed by `UserDefaults.standard`, namespaced by key. Shows how a host wires
+    /// storage into the component — the component itself never touches UserDefaults.
+    static let userDefaults = WorkbenchLayoutStore(
+        load: { key in
+            (UserDefaults.standard.dictionary(forKey: "GitWorkbench.columns.\(key)") as? [String: Double])?
+                .mapValues { CGFloat($0) }
+        },
+        save: { key, widths in
+            UserDefaults.standard.set(widths.mapValues { Double($0) }, forKey: "GitWorkbench.columns.\(key)")
+        }
+    )
 }
 
 /// Roots the live view on `AppModel` so swapping the repository rebuilds the UI against the new store.

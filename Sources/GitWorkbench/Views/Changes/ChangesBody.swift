@@ -3,6 +3,7 @@ import SwiftUI
 /// The Changes workspace: file-list + composer pane (320), then the diff pane; discard confirm overlays.
 struct ChangesBody: View {
     @ObservedObject var store: GitWorkbenchStore
+    @EnvironmentObject private var layout: ColumnLayout
     @Environment(\.workbenchTheme) private var theme
 
     var body: some View {
@@ -12,9 +13,10 @@ struct ChangesBody: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 CommitComposer(store: store)
             }
-            .frame(width: Tokens.changesListWidth)
+            .frame(width: layout.changesListWidth)
             .background(theme.sidebar)
-            .overlay(alignment: .trailing) { Rectangle().fill(theme.sep).frame(width: 1) }
+
+            ResizeDivider(width: $layout.changesListWidth, range: layout.changesListRange)
 
             ChangesDiffPane(store: store)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

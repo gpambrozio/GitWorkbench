@@ -35,7 +35,7 @@ struct WorkspaceRail: View {
             }
             .padding(.bottom, 8)
         }
-        .frame(width: Tokens.railWidth)
+        .frame(maxWidth: .infinity)   // width is set by the parent (resizable)
         .background(theme.sidebarDeep)
     }
 

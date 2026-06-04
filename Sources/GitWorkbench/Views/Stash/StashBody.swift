@@ -3,6 +3,7 @@ import SwiftUI
 /// The Stash workspace: stash list (360) + stash detail (or empty states).
 struct StashBody: View {
     @ObservedObject var store: GitWorkbenchStore
+    @EnvironmentObject private var layout: ColumnLayout
     @Environment(\.workbenchTheme) private var theme
 
     var body: some View {
@@ -30,9 +31,10 @@ struct StashBody: View {
                     }
                 }
             }
-            .frame(width: Tokens.historyListWidth)
+            .frame(width: layout.historyListWidth)
             .background(theme.sidebar)
-            .overlay(alignment: .trailing) { Rectangle().fill(theme.sep).frame(width: 1) }
+
+            ResizeDivider(width: $layout.historyListWidth, range: layout.historyListRange)
 
             Group {
                 if let stash = store.state.stashes.first(where: { $0.id == store.state.selectedStashID }) {

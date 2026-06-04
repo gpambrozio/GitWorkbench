@@ -3,10 +3,12 @@ import SwiftUI
 /// The reusable git-workbench component: toolbar + rail + active workspace view, themed and toasted.
 public struct GitWorkbenchView: View {
     @ObservedObject private var store: GitWorkbenchStore
+    @StateObject private var layout: ColumnLayout
     @Environment(\.colorScheme) private var colorScheme
 
     public init(store: GitWorkbenchStore) {
         self.store = store
+        _layout = StateObject(wrappedValue: ColumnLayout(configuration: store.configuration))
     }
 
     private var configuration: WorkbenchConfiguration { store.configuration }
@@ -20,9 +22,12 @@ public struct GitWorkbenchView: View {
             if configuration.showsToolbar { WorkbenchToolbar(store: store) }
             HStack(spacing: 0) {
                 WorkspaceRail(store: store)
+                    .frame(width: layout.railWidth)
+                ResizeDivider(width: $layout.railWidth, range: layout.railRange)
                 body(for: store.state.activeView)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .environmentObject(layout)
         }
         .background(theme.winBg)
         .foregroundStyle(theme.ink)
