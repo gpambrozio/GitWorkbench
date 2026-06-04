@@ -6,7 +6,8 @@ import Foundation
 public final class GitWorkbenchStore: ObservableObject {
 
     @Published public private(set) var state: WorkbenchState
-    public let configuration: WorkbenchConfiguration
+    /// Published so a host can recolor at runtime (see `setTheme`); other fields are set once at init.
+    @Published public private(set) var configuration: WorkbenchConfiguration
 
     private let provider: any GitWorkbenchProvider
 
@@ -84,6 +85,12 @@ public final class GitWorkbenchStore: ObservableObject {
     public func select(_ view: WorkspaceView) { state.activeView = view }
     public func setDiffMode(_ mode: DiffMode) { state.diffMode = mode }
     public func setCommitMessage(_ text: String) { state.commitMessage = text }
+
+    /// Swap the light + dark color themes at runtime (recolors immediately, no reload).
+    public func setTheme(light: WorkbenchTheme, dark: WorkbenchTheme) {
+        configuration.theme = light
+        configuration.darkTheme = dark
+    }
 
     public func select(file id: FileChange.ID) {
         state.selectedFileID = id

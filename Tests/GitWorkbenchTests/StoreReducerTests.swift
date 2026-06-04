@@ -27,6 +27,15 @@ final class StoreReducerTests: XCTestCase {
         XCTAssertNotNil(store.state.selectedCommitID)   // tip auto-selected
     }
 
+    func test_setThemeUpdatesConfiguration() {
+        let store = makeStore()
+        var custom = WorkbenchTheme.standard
+        custom.adoptsSystemAccent = true                 // a flag we can assert without Color equality
+        store.setTheme(light: custom, dark: custom)
+        XCTAssertTrue(store.configuration.theme.adoptsSystemAccent)
+        XCTAssertTrue(store.configuration.darkTheme.adoptsSystemAccent)
+    }
+
     func test_switchBranchClearsHistoryBranch() async {
         let store = makeStore()
         await store.reload()

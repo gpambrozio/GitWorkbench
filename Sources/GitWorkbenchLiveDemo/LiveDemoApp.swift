@@ -12,22 +12,39 @@ final class AppModel: ObservableObject {
     static let shared = AppModel()
 
     @Published private(set) var store: GitWorkbenchStore
+    @Published private(set) var themeName: String
     private(set) var repoURL: URL
     private var watcher: RepositoryWatcher?
 
+    private static let themeKey = "LiveDemo.theme"
+
     private init() {
         let url = Self.initialRepoURL
+        let theme = UserDefaults.standard.string(forKey: Self.themeKey) ?? DemoThemes.all[0].name
         repoURL = url
-        store = Self.makeStore(for: url)
+        themeName = theme
+        store = Self.makeStore(for: url, themeName: theme)
     }
 
-    /// A store whose configuration opts into persistence, so resized column widths survive relaunches.
-    /// One key for the whole demo → column sizes are shared across repositories.
-    private static func makeStore(for url: URL) -> GitWorkbenchStore {
+    /// A store whose configuration opts into persistence (so resized column widths survive relaunches)
+    /// and carries the selected sample theme.
+    private static func makeStore(for url: URL, themeName: String) -> GitWorkbenchStore {
         var configuration = WorkbenchConfiguration()
         configuration.persistenceKey = "LiveDemo"
         configuration.layoutStore = .userDefaults
+        let theme = DemoThemes.named(themeName)
+        configuration.theme = theme.light
+        configuration.darkTheme = theme.dark
         return GitWorkbenchStore(provider: CLIGitProvider(repositoryURL: url), configuration: configuration)
+    }
+
+    /// Switch the active sample theme — recolors instantly (no reload) and persists the choice.
+    func applyTheme(named name: String) {
+        guard name != themeName else { return }
+        themeName = name
+        UserDefaults.standard.set(name, forKey: Self.themeKey)
+        let theme = DemoThemes.named(name)
+        store.setTheme(light: theme.light, dark: theme.dark)
     }
 
     /// Initial load + start watching (interactive mode).
@@ -56,7 +73,7 @@ final class AppModel: ObservableObject {
         watcher?.stop()
         watcher = nil
         repoURL = url
-        store = Self.makeStore(for: url)
+        store = Self.makeStore(for: url, themeName: themeName)
         Task { @MainActor in
             await store.reload()
             startWatching()
@@ -236,6 +253,15 @@ struct GitWorkbenchLiveDemoApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("Open Repository\u{2026}") { AppModel.shared.openWithPanel() }
                     .keyboardShortcut("o", modifiers: .command)
+            }
+            CommandMenu("Theme") {
+                Picker("Theme", selection: Binding(
+                    get: { AppModel.shared.themeName },
+                    set: { AppModel.shared.applyTheme(named: $0) }
+                )) {
+                    ForEach(DemoThemes.all) { Text($0.name).tag($0.name) }
+                }
+                .pickerStyle(.inline)
             }
         }
     }
