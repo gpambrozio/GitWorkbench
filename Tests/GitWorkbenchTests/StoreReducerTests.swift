@@ -17,6 +17,25 @@ final class StoreReducerTests: XCTestCase {
         XCTAssertEqual(store.state.branches.count, 4)
     }
 
+    func test_showHistorySetsBranchAndView() async {
+        let store = makeStore()
+        await store.reload()
+        await store.showHistory(of: Branch(name: "feature-x"))
+        XCTAssertEqual(store.state.activeView, .history)
+        XCTAssertEqual(store.state.historyBranch, "feature-x")
+        XCTAssertFalse(store.state.commits.isEmpty)
+        XCTAssertNotNil(store.state.selectedCommitID)   // tip auto-selected
+    }
+
+    func test_switchBranchClearsHistoryBranch() async {
+        let store = makeStore()
+        await store.reload()
+        await store.showHistory(of: Branch(name: "feature-x"))
+        XCTAssertEqual(store.state.historyBranch, "feature-x")
+        await store.switchBranch(to: Branch(name: "main"))
+        XCTAssertNil(store.state.historyBranch)            // history follows the new current branch
+    }
+
     func test_initAppliesConfiguration() {
         var config = WorkbenchConfiguration()
         config.initialView = .history
@@ -61,7 +80,7 @@ final class StoreReducerTests: XCTestCase {
 struct FailingProvider: GitWorkbenchProvider {
     struct Boom: Error, LocalizedError { var errorDescription: String? { "boom" } }
     func loadStatus() async throws -> RepositoryStatus { Fixtures.repositoryStatus }
-    func loadHistory(before: Commit.ID?, limit: Int) async throws -> [Commit] { Fixtures.commits }
+    func loadHistory(of ref: String?, before: Commit.ID?, limit: Int) async throws -> [Commit] { Fixtures.commits }
     func loadStashes() async throws -> [Stash] { Fixtures.stashes }
     func loadBranches() async throws -> [Branch] { Fixtures.branches }
     func loadDiff(_ request: DiffRequest) async throws -> FileDiff { throw Boom() }

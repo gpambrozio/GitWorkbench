@@ -40,7 +40,8 @@ public actor MockGitProvider: GitWorkbenchProvider {
         return status
     }
 
-    public func loadHistory(before: Commit.ID?, limit: Int) async throws -> [Commit] {
+    public func loadHistory(of ref: String?, before: Commit.ID?, limit: Int) async throws -> [Commit] {
+        _ = ref   // the mock has a single fixture history; branch ref doesn't change it
         await pause()
         let start: Int
         if let before, let idx = commits.firstIndex(where: { $0.id == before }) {

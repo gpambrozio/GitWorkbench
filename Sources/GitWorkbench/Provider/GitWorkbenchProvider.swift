@@ -7,8 +7,9 @@ public protocol GitWorkbenchProvider: GitWorkbenchDataSource, GitWorkbenchAction
 public protocol GitWorkbenchDataSource: Sendable {
     /// Working-tree status: branch, ahead/behind, staged + unstaged files.
     func loadStatus() async throws -> RepositoryStatus
-    /// Commit history for the current branch (newest first). `before` pages older than that commit.
-    func loadHistory(before: Commit.ID?, limit: Int) async throws -> [Commit]
+    /// Commit history starting at `ref` (a branch name; nil = current HEAD), newest first.
+    /// `before` pages older than that commit (by SHA, so it is branch-independent).
+    func loadHistory(of ref: String?, before: Commit.ID?, limit: Int) async throws -> [Commit]
     /// Stash entries (index 0 newest).
     func loadStashes() async throws -> [Stash]
     /// Local branches for the switcher.

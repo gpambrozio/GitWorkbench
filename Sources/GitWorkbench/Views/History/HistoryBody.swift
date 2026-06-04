@@ -16,14 +16,23 @@ struct HistoryBody: View {
                         .foregroundStyle(theme.ink3).padding(.horizontal, 6).padding(.vertical, 1)
                         .background(Color.black.opacity(0.06), in: Capsule())
                     Spacer()
-                    BranchPill(name: store.state.repo.currentBranch, dim: true, showsChevron: false, height: 24)
+                    BranchPill(name: store.state.historyBranch ?? store.state.repo.currentBranch,
+                               dim: true, showsChevron: false, height: 24)
                 }
                 .padding(.horizontal, 14).frame(height: 44)
                 .overlay(alignment: .bottom) { Rectangle().fill(theme.sep).frame(height: 1) }
 
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(store.state.commits) { CommitGraphRow(store: store, commit: $0) }
+                if store.state.isLoadingHistory {
+                    VStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Loading history\u{2026}").font(.system(size: 11.5)).foregroundStyle(theme.ink3)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(store.state.commits) { CommitGraphRow(store: store, commit: $0) }
+                        }
                     }
                 }
             }

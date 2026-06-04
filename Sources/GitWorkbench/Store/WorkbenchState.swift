@@ -19,6 +19,10 @@ public struct WorkbenchState: Sendable {
     public var commits: [Commit] = []
     public var selectedCommitID: Commit.ID?
     public var selectedCommitFileID: FileChange.ID?
+    /// Branch whose history is shown (nil = current HEAD). Set by clicking a branch in the rail.
+    public var historyBranch: String?
+    /// True while a branch's history is being fetched (shows a spinner in the History list).
+    public var isLoadingHistory: Bool = false
 
     // stash view
     public var stashes: [Stash] = []

@@ -33,14 +33,48 @@ public final class GitWorkbenchStore: ObservableObject {
         do {
             async let status = provider.loadStatus()
             async let branches = provider.loadBranches()
-            async let history = provider.loadHistory(before: nil, limit: 50)
             async let stashes = provider.loadStashes()
-            let (s, b, h, st) = try await (status, branches, history, stashes)
+            let (s, b, st) = try await (status, branches, stashes)
             state.repo = s
             state.branches = b
-            state.commits = h
             state.stashes = st
         } catch {
+            setError(error)
+        }
+        await reloadHistory()
+    }
+
+    /// Loads commits for the branch being viewed in History (`historyBranch`; nil = current HEAD),
+    /// falling back to HEAD if that ref has gone away (e.g. the branch was deleted externally) so a
+    /// background reload can't get stuck erroring.
+    private func reloadHistory() async {
+        do {
+            state.commits = try await provider.loadHistory(of: state.historyBranch, before: nil, limit: 50)
+        } catch {
+            guard state.historyBranch != nil else { setError(error); return }
+            state.historyBranch = nil
+            state.commits = (try? await provider.loadHistory(of: nil, before: nil, limit: 50)) ?? []
+        }
+    }
+
+    /// Show a branch's history (single-click on a branch in the rail): switch to History, load that
+    /// branch's commits, and select its tip. `historyBranch` persists across reloads.
+    public func showHistory(of branch: Branch) async {
+        state.activeView = .history
+        state.historyBranch = branch.name
+        state.isLoadingHistory = true
+        do {
+            state.commits = try await provider.loadHistory(of: branch.name, before: nil, limit: 50)
+            state.isLoadingHistory = false
+            if let first = state.commits.first {
+                await selectCommit(first.id)
+            } else {
+                state.selectedCommitID = nil
+                state.selectedCommitFileID = nil
+                state.currentDiff = nil
+            }
+        } catch {
+            state.isLoadingHistory = false
             setError(error)
         }
     }
@@ -221,6 +255,7 @@ extension GitWorkbenchStore {
         state.branchMenuOpen = false
         do {
             try await provider.switchBranch(to: branch)
+            state.historyBranch = nil   // history follows the new current branch
             await reload()
             state.toast = .success("Switched to \(branch.name)")
         } catch {

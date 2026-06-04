@@ -36,7 +36,7 @@ final class CLIGitProviderActionTests: XCTestCase {
         try await provider.stage([FileChange(path: "b.txt", status: .added)])
         let new = try await provider.commit(message: "add b", staged: [FileChange(path: "b.txt", status: .added)])
         XCTAssertEqual(new.summary, "add b")
-        let history = try await provider.loadHistory(before: nil, limit: 10)
+        let history = try await provider.loadHistory(of: nil, before: nil, limit: 10)
         XCTAssertEqual(history.count, 2)
         XCTAssertEqual(history.first?.summary, "add b")
         XCTAssertEqual(new.id, history.first?.id)

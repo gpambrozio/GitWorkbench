@@ -57,12 +57,14 @@ public struct CLIGitProvider: GitWorkbenchProvider {
         return stashes
     }
 
-    public func loadHistory(before: Commit.ID?, limit: Int) async throws -> [Commit] {
+    public func loadHistory(of ref: String?, before: Commit.ID?, limit: Int) async throws -> [Commit] {
         var args = ["log", "--format=\(Self.logFormat)", "--max-count=\(limit)"]
         // Page older than `before` with `--skip=1 <before>` rather than `<before>^`: equivalent for
         // interior commits, but returns an empty page (exit 0) at the root commit instead of
-        // `<sha>^` failing with "unknown revision" (exit 128) and throwing.
+        // `<sha>^` failing with "unknown revision" (exit 128) and throwing. The paging SHA already pins
+        // the position, so `ref` only applies to the first page (else `git log` defaults to HEAD).
         if let before { args += ["--skip=1", "\(before)"] }
+        else if let ref { args.append(ref) }
         let out = try await runner.output(args).text
         var commits = LogParser.parse(out)
         for index in commits.indices {

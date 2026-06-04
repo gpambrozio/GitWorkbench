@@ -19,11 +19,12 @@ struct WorkspaceRail: View {
                 railHeader("BRANCHES")
                 ForEach(s.branches) { branch in
                     RailItem(icon: IconLibrary.branch, title: branch.name, count: nil,
-                             selected: false, current: branch.name == s.repo.currentBranch,
-                             activateOnDoubleClick: true) {
-                        Task { await store.switchBranch(to: branch) }
+                             selected: s.activeView == .history && branch.name == (s.historyBranch ?? s.repo.currentBranch),
+                             current: branch.name == s.repo.currentBranch,
+                             doubleAction: { Task { await store.switchBranch(to: branch) } }) {
+                        Task { await store.showHistory(of: branch) }
                     }
-                    .help("Double-click to switch to \(branch.name)")
+                    .help("Click to view history \u{00B7} double-click to switch")
                 }
 
                 railHeader("REMOTES")
@@ -57,15 +58,17 @@ private struct RailItem: View {
     let selected: Bool
     var current: Bool = false
     var indent: CGFloat = 0
-    /// When true the row activates on double-click (single clicks do nothing) — used for branches so a
-    /// stray click doesn't switch. Default rows activate on a single click.
-    var activateOnDoubleClick: Bool = false
+    /// Optional double-click action. When set, a single click runs `action` and a double-click runs
+    /// this — used for branch rows (click = view history, double-click = switch).
+    var doubleAction: (() -> Void)? = nil
     let action: () -> Void
 
     var body: some View {
         Group {
-            if activateOnDoubleClick {
-                label.onTapGesture(count: 2, perform: action)
+            if let doubleAction {
+                label
+                    .onTapGesture(count: 2, perform: doubleAction)
+                    .onTapGesture(count: 1, perform: action)
             } else {
                 Button(action: action) { label }.buttonStyle(.plain)
             }
@@ -84,12 +87,13 @@ private struct RailItem: View {
                 .foregroundStyle(selected ? .white : theme.ink)
                 .lineLimit(1)
             Spacer(minLength: 6)
-            if current && !selected {
+            if current {
                 Text("HEAD")
                     .font(.system(size: 9.5, weight: .bold))
-                    .foregroundStyle(theme.accentDeep)
+                    .foregroundStyle(selected ? .white : theme.accentDeep)
                     .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(theme.accentSoft, in: RoundedRectangle(cornerRadius: 4))
+                    .background(selected ? Color.white.opacity(0.22) : theme.accentSoft,
+                                in: RoundedRectangle(cornerRadius: 4))
             }
             if let count {
                 Text("\(count)")

@@ -52,13 +52,32 @@ final class CLIGitProviderTests: XCTestCase {
     }
 
     func test_loadHistoryAndCommitFiles() async throws {
-        let commits = try await provider.loadHistory(before: nil, limit: 10)
+        let commits = try await provider.loadHistory(of: nil, before: nil, limit: 10)
         XCTAssertEqual(commits.count, 1)
         XCTAssertEqual(commits[0].summary, "first commit")
         XCTAssertEqual(commits[0].authorName, "Test User")
         XCTAssertEqual(commits[0].authorInitials, "TU")
         XCTAssertEqual(commits[0].files.map(\.path), ["a.txt"])
         XCTAssertEqual(commits[0].files.first?.status, .added)
+    }
+
+    func test_loadHistoryOfSpecificBranch() async throws {
+        // A second commit on main, then a feature branch off the root with its own commit.
+        try write("a.txt", "v2\n")
+        try await git(["commit", "-am", "main second"])
+        try await git(["checkout", "-b", "feature", "HEAD~1"])
+        try write("f.txt", "feat\n")
+        try await git(["add", "f.txt"])
+        try await git(["commit", "-m", "feature work"])
+        try await git(["checkout", "main"])
+
+        let main = try await provider.loadHistory(of: "main", before: nil, limit: 10)
+        XCTAssertEqual(main.map(\.summary), ["main second", "first commit"])
+        let feature = try await provider.loadHistory(of: "feature", before: nil, limit: 10)
+        XCTAssertEqual(feature.map(\.summary), ["feature work", "first commit"])
+        // nil starts at the current branch (main)
+        let current = try await provider.loadHistory(of: nil, before: nil, limit: 10)
+        XCTAssertEqual(current.map(\.summary), main.map(\.summary))
     }
 
     func test_loadBranches() async throws {
@@ -121,9 +140,9 @@ final class CLIGitProviderTests: XCTestCase {
     }
 
     func test_loadHistoryPagingPastRootReturnsEmpty() async throws {
-        let commits = try await provider.loadHistory(before: nil, limit: 10)
+        let commits = try await provider.loadHistory(of: nil, before: nil, limit: 10)
         XCTAssertEqual(commits.count, 1)            // setUp makes exactly one (root) commit
-        let older = try await provider.loadHistory(before: commits[0].id, limit: 10)
+        let older = try await provider.loadHistory(of: nil, before: commits[0].id, limit: 10)
         XCTAssertTrue(older.isEmpty, "paging before the root commit must return empty, not throw")
     }
 }

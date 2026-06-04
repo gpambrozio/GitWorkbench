@@ -14,10 +14,10 @@ final class MockProviderTests: XCTestCase {
 
     func test_loadHistoryRespectsLimitAndPaging() async throws {
         let p = provider()
-        let firstTwo = try await p.loadHistory(before: nil, limit: 2)
+        let firstTwo = try await p.loadHistory(of: nil, before: nil, limit: 2)
         XCTAssertEqual(firstTwo.map(\.shortSHA), ["9f2c1a4", "3b8e7d2"])
         // page older than the 2nd commit
-        let next = try await p.loadHistory(before: firstTwo[1].id, limit: 2)
+        let next = try await p.loadHistory(of: nil, before: firstTwo[1].id, limit: 2)
         XCTAssertEqual(next.map(\.shortSHA), ["a17f9c0", "e4d5b61"])
     }
 
@@ -75,7 +75,7 @@ final class MockProviderTests: XCTestCase {
         let status = try await p.loadStatus()
         XCTAssertEqual(status.files.filter(\.isStaged).count, 0)
         XCTAssertEqual(status.ahead, 3)   // was 2
-        let history = try await p.loadHistory(before: nil, limit: 1)
+        let history = try await p.loadHistory(of: nil, before: nil, limit: 1)
         XCTAssertEqual(history.first?.summary, "Wire it up")
     }
 
