@@ -45,6 +45,52 @@ public struct WorkbenchTheme: Sendable {
     public var splitEmptyCell: Color
     public var hunkHeaderBg: Color
 
+    /// Build a custom theme. Every token defaults to the light identity (`.standard`), so a host can
+    /// override only what it wants — e.g. `WorkbenchTheme(accent: .pink, winBg: .black)`. For a dark
+    /// variant, start from `.darkStandard` and copy-and-tweak, or pass it as `configuration.darkTheme`.
+    public init(
+        adoptsSystemAccent: Bool = false,
+        accent: Color = Self.standard.accent,
+        accentDeep: Color = Self.standard.accentDeep,
+        accentSoft: Color = Self.standard.accentSoft,
+        accentRing: Color = Self.standard.accentRing,
+        winBg: Color = Self.standard.winBg,
+        sidebar: Color = Self.standard.sidebar,
+        sidebarDeep: Color = Self.standard.sidebarDeep,
+        titlebar: Color = Self.standard.titlebar,
+        field: Color = Self.standard.field,
+        ink: Color = Self.standard.ink,
+        ink2: Color = Self.standard.ink2,
+        ink3: Color = Self.standard.ink3,
+        sep: Color = Self.standard.sep,
+        sepStrong: Color = Self.standard.sepStrong,
+        statusModified: Color = Self.standard.statusModified,
+        statusAdded: Color = Self.standard.statusAdded,
+        statusDeleted: Color = Self.standard.statusDeleted,
+        statusRenamed: Color = Self.standard.statusRenamed,
+        statusUntracked: Color = Self.standard.statusUntracked,
+        statusConflicted: Color = Self.standard.statusConflicted,
+        addBg: Color = Self.standard.addBg,
+        addGut: Color = Self.standard.addGut,
+        addInk: Color = Self.standard.addInk,
+        delBg: Color = Self.standard.delBg,
+        delGut: Color = Self.standard.delGut,
+        delInk: Color = Self.standard.delInk,
+        splitEmptyCell: Color = Self.standard.splitEmptyCell,
+        hunkHeaderBg: Color = Self.standard.hunkHeaderBg
+    ) {
+        self.adoptsSystemAccent = adoptsSystemAccent
+        self.accent = accent; self.accentDeep = accentDeep; self.accentSoft = accentSoft; self.accentRing = accentRing
+        self.winBg = winBg; self.sidebar = sidebar; self.sidebarDeep = sidebarDeep; self.titlebar = titlebar; self.field = field
+        self.ink = ink; self.ink2 = ink2; self.ink3 = ink3
+        self.sep = sep; self.sepStrong = sepStrong
+        self.statusModified = statusModified; self.statusAdded = statusAdded; self.statusDeleted = statusDeleted
+        self.statusRenamed = statusRenamed; self.statusUntracked = statusUntracked; self.statusConflicted = statusConflicted
+        self.addBg = addBg; self.addGut = addGut; self.addInk = addInk
+        self.delBg = delBg; self.delGut = delGut; self.delInk = delInk
+        self.splitEmptyCell = splitEmptyCell; self.hunkHeaderBg = hunkHeaderBg
+    }
+
     /// Color for a given file status.
     public func color(for status: FileStatus) -> Color {
         switch status {
@@ -57,16 +103,22 @@ public struct WorkbenchTheme: Sendable {
         }
     }
 
-    /// Returns a copy that uses the system accent (`NSColor.controlAccentColor`),
-    /// deriving the soft/ring/deep variants from it (§4.1).
-    public func adoptingSystemAccent() -> WorkbenchTheme {
+    /// Returns a copy recolored to `color`, deriving the soft/ring/deep variants from it. Handy for a
+    /// quick rebrand: `WorkbenchTheme.standard.withAccent(.pink)`.
+    public func withAccent(_ color: Color) -> WorkbenchTheme {
         var copy = self
-        let sys = Color(nsColor: .controlAccentColor)
+        copy.adoptsSystemAccent = false
+        copy.accent = color
+        copy.accentSoft = color.opacity(0.13)
+        copy.accentRing = color.opacity(0.45)
+        copy.accentDeep = color               // blended-toward-black handled at use sites if needed
+        return copy
+    }
+
+    /// Returns a copy that uses the macOS system accent (`NSColor.controlAccentColor`).
+    public func adoptingSystemAccent() -> WorkbenchTheme {
+        var copy = withAccent(Color(nsColor: .controlAccentColor))
         copy.adoptsSystemAccent = true
-        copy.accent = sys
-        copy.accentSoft = sys.opacity(0.13)
-        copy.accentRing = sys.opacity(0.45)
-        copy.accentDeep = sys                 // blended-toward-black handled at use sites if needed
         return copy
     }
 

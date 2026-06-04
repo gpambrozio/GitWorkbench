@@ -52,8 +52,11 @@ public struct WorkbenchConfiguration: Sendable {
     public var layoutStore: WorkbenchLayoutStore? = nil
     /// Pane sizing (defaults + min constraints).
     public var layout: WorkbenchLayout = .init()
-    /// Visual theme (light identity by default).
+    /// Light-mode colors (the purple identity by default). Override to rebrand; set
+    /// `theme.adoptsSystemAccent = true` to follow the macOS accent instead.
     public var theme: WorkbenchTheme = .standard
+    /// Dark-mode colors, used when the environment color scheme is dark.
+    public var darkTheme: WorkbenchTheme = .darkStandard
 
     public init() {}
 }

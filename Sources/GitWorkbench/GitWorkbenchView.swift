@@ -13,8 +13,8 @@ public struct GitWorkbenchView: View {
 
     private var configuration: WorkbenchConfiguration { store.configuration }
     private var theme: WorkbenchTheme {
-        WorkbenchTheme.resolved(for: colorScheme,
-                                adoptsSystemAccent: configuration.theme.adoptsSystemAccent)
+        let base = colorScheme == .dark ? configuration.darkTheme : configuration.theme
+        return base.adoptsSystemAccent ? base.adoptingSystemAccent() : base
     }
 
     public var body: some View {

@@ -28,4 +28,26 @@ final class WorkbenchThemeTests: XCTestCase {
         let dark = rgb(WorkbenchTheme.darkStandard.winBg)
         XCTAssertNotEqual(light.r, dark.r, accuracy: 0.0001)
     }
+
+    func test_withAccentRecolorsAccentAndLeavesSurfaces() {
+        let theme = WorkbenchTheme.standard.withAccent(Color(red: 0.86, green: 0.18, blue: 0.46))
+        XCTAssertFalse(theme.adoptsSystemAccent)
+        let a = rgb(theme.accent)
+        XCTAssertEqual(a.r, 0.86, accuracy: 0.01)
+        XCTAssertEqual(a.g, 0.18, accuracy: 0.01)
+        XCTAssertEqual(a.b, 0.46, accuracy: 0.01)
+        // non-accent tokens untouched
+        XCTAssertEqual(rgb(theme.winBg).r, rgb(WorkbenchTheme.standard.winBg).r, accuracy: 0.001)
+    }
+
+    func test_publicInitDefaultsUnsetTokensToStandard() {
+        let theme = WorkbenchTheme(accent: Color(red: 0.86, green: 0.18, blue: 0.46), winBg: .black)
+        XCTAssertEqual(rgb(theme.accent).r, 0.86, accuracy: 0.01)   // overridden
+        XCTAssertEqual(rgb(theme.winBg).r, 0, accuracy: 0.01)       // overridden (black)
+        // an unset token falls back to the light standard
+        let ink = rgb(theme.ink), std = rgb(WorkbenchTheme.standard.ink)
+        XCTAssertEqual(ink.r, std.r, accuracy: 0.001)
+        XCTAssertEqual(ink.g, std.g, accuracy: 0.001)
+        XCTAssertEqual(ink.b, std.b, accuracy: 0.001)
+    }
 }
