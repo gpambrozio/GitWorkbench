@@ -48,7 +48,7 @@ Swift Package Manager:
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/you/GitWorkbench.git", from: "1.0.0"),
+    .package(url: "https://github.com/gpambrozio/GitWorkbench.git", from: "1.0.0"),
     // …or a local checkout: .package(path: "../GitWorkbench"),
 ],
 targets: [
