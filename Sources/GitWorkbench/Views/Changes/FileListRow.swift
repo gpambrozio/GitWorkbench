@@ -25,19 +25,11 @@ struct FileListRow: View {
                     .lineLimit(1).truncationMode(.middle)
             }
             Spacer(minLength: 6)
-            if hover {
-                Button { store.requestDiscard(file.id) } label: {
-                    Image(systemName: IconLibrary.discard)
-                        .font(.system(size: 11))
-                        .foregroundStyle(selected ? .white : theme.ink2)
-                        .frame(width: 20, height: 20)
-                        .background(selected ? Color.white.opacity(0.18) : Color.black.opacity(0.06),
-                                    in: RoundedRectangle(cornerRadius: 5))
-                }
-                .buttonStyle(.plain)
-            } else {
-                stats(selected: selected)
-            }
+            // Stats / discard get top priority and a fixed size so they stay visible as the column
+            // narrows — the name (priority 1) and path (priority 0) truncate instead.
+            trailing(selected: selected)
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(2)
         }
         .padding(.horizontal, 12)
         .frame(height: Tokens.changesRowHeight)
@@ -46,6 +38,22 @@ struct FileListRow: View {
         .contentShape(Rectangle())
         .onTapGesture { store.select(file: file.id) }
         .onHover { hover = $0 }
+    }
+
+    @ViewBuilder private func trailing(selected: Bool) -> some View {
+        if hover {
+            Button { store.requestDiscard(file.id) } label: {
+                Image(systemName: IconLibrary.discard)
+                    .font(.system(size: 11))
+                    .foregroundStyle(selected ? .white : theme.ink2)
+                    .frame(width: 20, height: 20)
+                    .background(selected ? Color.white.opacity(0.18) : Color.black.opacity(0.06),
+                                in: RoundedRectangle(cornerRadius: 5))
+            }
+            .buttonStyle(.plain)
+        } else {
+            stats(selected: selected)
+        }
     }
 
     @ViewBuilder private func stats(selected: Bool) -> some View {
