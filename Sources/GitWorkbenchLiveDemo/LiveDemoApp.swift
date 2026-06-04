@@ -3,25 +3,67 @@ import AppKit
 import GitWorkbench
 import GitWorkbenchGitKit
 
-/// Shared store so the App scene and the launch delegate (snapshot mode) use the same instance.
-/// Unlike the mock demo, this is backed by a real `CLIGitProvider` pointed at a repo on disk.
+/// Holds the live store and lets the user point it at a different repository at runtime. The store is
+/// swapped wholesale on open (the core provider is immutable by design), and views observe this model so
+/// they rebuild against the new store. Backed by a real `CLIGitProvider`; a `RepositoryWatcher` keeps it
+/// in sync with on-disk changes.
 @MainActor
-enum LiveState {
-    static let store = GitWorkbenchStore(provider: CLIGitProvider(repositoryURL: repoURL))
+final class AppModel: ObservableObject {
+    static let shared = AppModel()
 
-    /// Live filesystem watcher (interactive mode only). Held statically so it outlives `runWindowed`.
-    static var watcher: RepositoryWatcher?
+    @Published private(set) var store: GitWorkbenchStore
+    private(set) var repoURL: URL
+    private var watcher: RepositoryWatcher?
+
+    private init() {
+        let url = Self.initialRepoURL
+        repoURL = url
+        store = GitWorkbenchStore(provider: CLIGitProvider(repositoryURL: url))
+    }
+
+    /// Initial load + start watching (interactive mode).
+    func start() async {
+        await store.reload()
+        startWatching()
+    }
+
+    /// Prompt for a folder and, if chosen, open it as the repository.
+    func openWithPanel() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a git repository folder"
+        panel.prompt = "Open"
+        panel.directoryURL = repoURL
+        if panel.runModal() == .OK, let url = panel.url {
+            open(url)
+        }
+    }
+
+    /// Point the demo at `url`: swap in a fresh store, reload, and re-aim the filesystem watcher.
+    func open(_ url: URL) {
+        guard url != repoURL else { return }
+        watcher?.stop()
+        watcher = nil
+        repoURL = url
+        store = GitWorkbenchStore(provider: CLIGitProvider(repositoryURL: url))
+        Task { @MainActor in
+            await store.reload()
+            startWatching()
+        }
+    }
 
     /// Watch the working tree and reload on any change (debounced), so external edits / commits / stashes
     /// show up without relaunching. Also refreshes the open working-tree diff via the public `select`
     /// intent, so editing the file you're viewing updates the diff pane, not just the file list.
-    static func startWatching() {
-        guard watcher == nil else { return }
-        let watcher = RepositoryWatcher(url: repoURL) {
+    private func startWatching() {
+        let watcher = RepositoryWatcher(url: repoURL) { [weak self] in
             Task { @MainActor in
-                await store.reload()
-                if store.state.activeView == .changes, let id = store.state.selectedFileID {
-                    store.select(file: id)
+                guard let self else { return }
+                await self.store.reload()
+                if self.store.state.activeView == .changes, let id = self.store.state.selectedFileID {
+                    self.store.select(file: id)
                 }
             }
         }
@@ -30,7 +72,7 @@ enum LiveState {
     }
 
     /// First positional argument (skipping flags and the values of every value-taking flag); defaults to cwd.
-    static let repoURL: URL = {
+    nonisolated static var initialRepoURL: URL {
         let args = CommandLine.arguments
         let valuedFlags: Set<String> = ["--shot", "--view", "--select", "--mode"]
         var positionals: [String] = []
@@ -43,7 +85,16 @@ enum LiveState {
         }
         let path = positionals.first ?? FileManager.default.currentDirectoryPath
         return URL(fileURLWithPath: path)
-    }()
+    }
+}
+
+/// Roots the live view on `AppModel` so swapping the repository rebuilds the UI against the new store.
+struct RootView: View {
+    @ObservedObject var app: AppModel
+    var body: some View {
+        GitWorkbenchView(store: app.store)
+            .frame(minWidth: 1080, minHeight: 660)
+    }
 }
 
 @MainActor
@@ -70,8 +121,7 @@ final class LiveDemoDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(for: .milliseconds(500))
             if NSApp.windows.first(where: { $0.contentView != nil }) == nil {
                 let size = NSRect(x: 0, y: 0, width: 1200, height: 740)
-                let hosting = NSHostingView(rootView: GitWorkbenchView(store: LiveState.store)
-                    .frame(minWidth: size.width, minHeight: size.height))
+                let hosting = NSHostingView(rootView: RootView(app: .shared))
                 hosting.frame = size
                 let window = NSWindow(contentRect: size, styleMask: [.titled, .closable, .miniaturizable, .resizable],
                                       backing: .buffered, defer: false)
@@ -82,8 +132,7 @@ final class LiveDemoDelegate: NSObject, NSApplicationDelegate {
             } else {
                 NSApp.windows.first?.makeKeyAndOrderFront(nil)
             }
-            await LiveState.store.reload()
-            LiveState.startWatching()
+            await AppModel.shared.start()
         }
     }
 
@@ -102,7 +151,7 @@ final class LiveDemoDelegate: NSObject, NSApplicationDelegate {
     private func runSnapshot(path: String, view: String?, select: String?, mode: String?) {
         NSApp.setActivationPolicy(.accessory)   // no Dock icon / minimal disturbance
         let dark = CommandLine.arguments.contains("--dark")
-        let store = LiveState.store
+        let store = AppModel.shared.store
         let size = NSRect(x: 0, y: 0, width: 1200, height: 740)
         let hosting = NSHostingView(rootView: GitWorkbenchView(store: store).frame(width: size.width, height: size.height))
         hosting.frame = size
@@ -157,9 +206,14 @@ struct GitWorkbenchLiveDemoApp: App {
 
     var body: some Scene {
         WindowGroup("GitWorkbench (Live)") {
-            GitWorkbenchView(store: LiveState.store)
-                .frame(minWidth: 1080, minHeight: 660)
+            RootView(app: .shared)
         }
         .defaultSize(width: 1200, height: 740)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("Open Repository\u{2026}") { AppModel.shared.openWithPanel() }
+                    .keyboardShortcut("o", modifiers: .command)
+            }
+        }
     }
 }
