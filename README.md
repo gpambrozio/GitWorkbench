@@ -6,6 +6,8 @@ repository data; GitWorkbench renders it and turns user actions back into calls 
 
 ![GitWorkbench — Changes view](docs/screenshots/changes.png)
 
+> Designed in Claude and implemented with Claude Code — read [how it was built](BUILT-WITH-AI.md).
+
 ## What it is
 
 GitWorkbench is a **UI + state** component: **it never runs `git` itself.** Your app (the *host*)
