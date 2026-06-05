@@ -42,4 +42,51 @@ final class ChangesMouseCatcherTests: XCTestCase {
                            "\(type) should fall through to the row")
         }
     }
+
+    // MARK: - Real NSEvent guard (regression for the CursorUpdate crash)
+    //
+    // `NSEvent.clickCount` is only valid for mouse-button events; reading it on a CursorUpdate /
+    // mouseMoved event raises NSInternalInconsistencyException. AppKit dispatches a CursorUpdate
+    // through `hitTest` during its cursor-tracking cycle, so the catcher must decide from a concrete
+    // event WITHOUT touching `clickCount` for non-button types. These drive that decision through real
+    // NSEvents — the path `hitTest` actually takes.
+
+    func test_doesNotClaimCursorUpdateEvent() throws {
+        let cursorUpdate = try XCTUnwrap(
+            NSEvent.enterExitEvent(with: .cursorUpdate, location: .zero, modifierFlags: [],
+                                   timestamp: 0, windowNumber: 0, context: nil,
+                                   eventNumber: 0, trackingNumber: 0, userData: nil))
+        // Must not read clickCount on this event (would raise) and must fall through to the row.
+        XCTAssertFalse(ChangesMouseCatcher.shouldClaim(event: cursorUpdate,
+                                                       handlesRightClick: true, handlesDoubleClick: true))
+        XCTAssertEqual(ChangesMouseCatcher.clickCount(for: cursorUpdate), 0)
+    }
+
+    func test_claimsRealDoubleClickEvent() throws {
+        let doubleClick = try XCTUnwrap(
+            NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: [],
+                               timestamp: 0, windowNumber: 0, context: nil,
+                               eventNumber: 0, clickCount: 2, pressure: 1))
+        XCTAssertEqual(ChangesMouseCatcher.clickCount(for: doubleClick), 2)
+        XCTAssertTrue(ChangesMouseCatcher.shouldClaim(event: doubleClick,
+                                                      handlesRightClick: false, handlesDoubleClick: true))
+        // Single click falls through so the row still selects.
+        let singleClick = try XCTUnwrap(
+            NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: [],
+                               timestamp: 0, windowNumber: 0, context: nil,
+                               eventNumber: 0, clickCount: 1, pressure: 1))
+        XCTAssertFalse(ChangesMouseCatcher.shouldClaim(event: singleClick,
+                                                       handlesRightClick: false, handlesDoubleClick: true))
+    }
+
+    func test_claimsRealRightClickEvent() throws {
+        let rightClick = try XCTUnwrap(
+            NSEvent.mouseEvent(with: .rightMouseDown, location: .zero, modifierFlags: [],
+                               timestamp: 0, windowNumber: 0, context: nil,
+                               eventNumber: 0, clickCount: 1, pressure: 1))
+        XCTAssertTrue(ChangesMouseCatcher.shouldClaim(event: rightClick,
+                                                      handlesRightClick: true, handlesDoubleClick: false))
+        XCTAssertFalse(ChangesMouseCatcher.shouldClaim(event: rightClick,
+                                                       handlesRightClick: false, handlesDoubleClick: false))
+    }
 }

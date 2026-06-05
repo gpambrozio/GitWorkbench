@@ -34,9 +34,9 @@ struct ChangesMouseCatcher: NSViewRepresentable {
         // clickCount 2 and is claimed here — matching the familiar "click selects, double-click opens".
         override func hitTest(_ point: NSPoint) -> NSView? {
             guard let event = NSApp.currentEvent,
-                  ChangesMouseCatcher.claims(eventType: event.type, clickCount: event.clickCount,
-                                             handlesRightClick: onRightClick != nil,
-                                             handlesDoubleClick: onDoubleClick != nil)
+                  ChangesMouseCatcher.shouldClaim(event: event,
+                                                  handlesRightClick: onRightClick != nil,
+                                                  handlesDoubleClick: onDoubleClick != nil)
             else { return nil }
             return self
         }
@@ -49,6 +49,31 @@ struct ChangesMouseCatcher: NSViewRepresentable {
 
         // Never steal keyboard focus.
         override var acceptsFirstResponder: Bool { false }
+    }
+
+    /// Whether the catcher should claim (handle) a concrete in-flight `NSEvent` — the rest falls through
+    /// to the row. This is what `hitTest` calls. It reads `clickCount` via `clickCount(for:)`, which is
+    /// safe on every event type: `NSEvent.clickCount` is only valid for mouse-button events, and reading
+    /// it on a CursorUpdate / mouseMoved event — which AppKit routes through `hitTest` during its
+    /// cursor-tracking cycle — raises `NSInternalInconsistencyException` and crashes the app.
+    nonisolated static func shouldClaim(event: NSEvent,
+                                        handlesRightClick: Bool, handlesDoubleClick: Bool) -> Bool {
+        claims(eventType: event.type, clickCount: clickCount(for: event),
+               handlesRightClick: handlesRightClick, handlesDoubleClick: handlesDoubleClick)
+    }
+
+    /// `NSEvent.clickCount` is valid only for mouse-button events; reading it on any other type raises.
+    /// Returns the real count for button events and 0 for everything else, so callers never touch the
+    /// unsafe accessor on a hover / cursor-update / scroll event.
+    nonisolated static func clickCount(for event: NSEvent) -> Int {
+        switch event.type {
+        case .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
+             .otherMouseDown, .otherMouseUp,
+             .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
+            return event.clickCount
+        default:
+            return 0
+        }
     }
 
     /// Whether the catcher should claim (handle) an in-flight event — the rest falls through to the row.
