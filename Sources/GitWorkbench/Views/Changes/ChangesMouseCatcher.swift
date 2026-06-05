@@ -2,13 +2,20 @@ import SwiftUI
 import AppKit
 
 /// A transparent overlay over a Changes-tab file row that reports right-clicks and double-clicks to the
-/// host. SwiftUI exposes no hook for right-clicks, and double-click via `onTapGesture(count: 2)` races
-/// the row's single-click selection — so, like `HorizontalScrollCatcher`, this drops to AppKit.
+/// host. SwiftUI exposes no hook for right-clicks, so — like `HorizontalScrollCatcher` — this drops to
+/// AppKit. Right-clicks and double-clicks travel through *different* mechanisms because AppKit routes
+/// them differently:
 ///
-/// The catcher claims *only* the events it acts on: it inspects the in-flight event in `hitTest` and
-/// returns `nil` for single left-clicks, hover tracking, and scrolling, which then fall straight through
-/// to the SwiftUI row beneath (selection, the stage-box tap, the hover highlight, and diff scrolling all
-/// keep working). Double-clicks and right-clicks return `self` and are handled here.
+/// - **Right-click** is a single, independently hit-tested event, so `hitTest` can claim it: the overlay
+///   returns `self` only for right-mouse events and `nil` for everything else, which falls straight
+///   through to the SwiftUI row beneath (selection, the stage box, hover, and scroll keep working).
+///
+/// - **Double-click** can't use `hitTest`. AppKit delivers the *second* click of a double-click to
+///   whichever view took the *first* click — and the first click (clickCount 1) intentionally falls
+///   through to the SwiftUI row so it can select. So the second click goes to that row, never to this
+///   overlay, and `mouseDown` is never sent here. Instead a local event monitor observes every left
+///   mouse-down regardless of routing and fires `onDoubleClick` for a clickCount-2 press inside this
+///   row's bounds, returning the event un-consumed so single-click selection still runs.
 struct ChangesMouseCatcher: NSViewRepresentable {
     var onRightClick: (() -> Void)?
     var onDoubleClick: (() -> Void)?
@@ -25,68 +32,71 @@ struct ChangesMouseCatcher: NSViewRepresentable {
         view.onDoubleClick = onDoubleClick
     }
 
+    static func dismantleNSView(_ view: CatcherView, coordinator: ()) {
+        view.stopMonitoring()
+    }
+
     final class CatcherView: NSView {
         var onRightClick: (() -> Void)?
-        var onDoubleClick: (() -> Void)?
+        var onDoubleClick: (() -> Void)? {
+            didSet { syncDoubleClickMonitor() }
+        }
+        /// Token for the local left-mouse-down monitor; non-nil only while a double-click handler is wired
+        /// and the view is in a window.
+        private var monitor: Any?
 
-        // Read the event being dispatched and claim only what we handle. The first click of a
-        // double-click has clickCount 1 and falls through (so the row still selects); the second has
-        // clickCount 2 and is claimed here — matching the familiar "click selects, double-click opens".
+        // Claim *only* right-clicks. Reads the in-flight event's type — never its `clickCount`, which is
+        // invalid for non-button events (a CursorUpdate routed here during cursor tracking) and raises.
         override func hitTest(_ point: NSPoint) -> NSView? {
-            guard let event = NSApp.currentEvent,
-                  ChangesMouseCatcher.shouldClaim(event: event,
-                                                  handlesRightClick: onRightClick != nil,
-                                                  handlesDoubleClick: onDoubleClick != nil)
+            guard onRightClick != nil,
+                  ChangesMouseCatcher.claimsRightClick(eventType: NSApp.currentEvent?.type)
             else { return nil }
             return self
         }
 
         override func rightMouseDown(with event: NSEvent) { onRightClick?() }
 
-        override func mouseDown(with event: NSEvent) {
-            if event.clickCount == 2 { onDoubleClick?() }
-        }
-
         // Never steal keyboard focus.
         override var acceptsFirstResponder: Bool { false }
-    }
 
-    /// Whether the catcher should claim (handle) a concrete in-flight `NSEvent` — the rest falls through
-    /// to the row. This is what `hitTest` calls. It reads `clickCount` via `clickCount(for:)`, which is
-    /// safe on every event type: `NSEvent.clickCount` is only valid for mouse-button events, and reading
-    /// it on a CursorUpdate / mouseMoved event — which AppKit routes through `hitTest` during its
-    /// cursor-tracking cycle — raises `NSInternalInconsistencyException` and crashes the app.
-    nonisolated static func shouldClaim(event: NSEvent,
-                                        handlesRightClick: Bool, handlesDoubleClick: Bool) -> Bool {
-        claims(eventType: event.type, clickCount: clickCount(for: event),
-               handlesRightClick: handlesRightClick, handlesDoubleClick: handlesDoubleClick)
-    }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            syncDoubleClickMonitor()   // install once we have a window; tear down when removed from one
+        }
 
-    /// `NSEvent.clickCount` is valid only for mouse-button events; reading it on any other type raises.
-    /// Returns the real count for button events and 0 for everything else, so callers never touch the
-    /// unsafe accessor on a hover / cursor-update / scroll event.
-    nonisolated static func clickCount(for event: NSEvent) -> Int {
-        switch event.type {
-        case .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
-             .otherMouseDown, .otherMouseUp,
-             .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
-            return event.clickCount
-        default:
-            return 0
+        private func syncDoubleClickMonitor() {
+            let wantsMonitor = onDoubleClick != nil && window != nil
+            if wantsMonitor, monitor == nil {
+                monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
+                    self?.fireDoubleClickIfInside(event)
+                    return event   // never consume — single-click selection beneath must still run
+                }
+            } else if !wantsMonitor {
+                stopMonitoring()
+            }
+        }
+
+        private func fireDoubleClickIfInside(_ event: NSEvent) {
+            guard event.clickCount == 2, let window, event.window === window else { return }
+            let local = convert(event.locationInWindow, from: nil)
+            if bounds.contains(local) { onDoubleClick?() }
+        }
+
+        func stopMonitoring() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
         }
     }
 
-    /// Whether the catcher should claim (handle) an in-flight event — the rest falls through to the row.
-    /// Pulled out of `hitTest` as a pure function so the pass-through policy is unit-testable without a
-    /// live window: right-clicks and the *second* click of a double-click are claimed; single clicks,
-    /// hover, and scroll are not. Only claims an event for which a handler is actually wired.
-    nonisolated static func claims(eventType type: NSEvent.EventType, clickCount: Int,
-                                   handlesRightClick: Bool, handlesDoubleClick: Bool) -> Bool {
-        switch type {
+    /// Whether `hitTest` should claim an in-flight event for the right-click handler — the rest falls
+    /// through to the row. Pure (reads only the event *type*) so the policy is unit-testable without a
+    /// live window, and deliberately never touches `clickCount`.
+    nonisolated static func claimsRightClick(eventType: NSEvent.EventType?) -> Bool {
+        switch eventType {
         case .rightMouseDown, .rightMouseUp:
-            return handlesRightClick
-        case .leftMouseDown, .leftMouseUp:
-            return handlesDoubleClick && clickCount == 2
+            return true
         default:
             return false
         }
