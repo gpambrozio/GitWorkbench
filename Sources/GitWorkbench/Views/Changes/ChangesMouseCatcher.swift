@@ -55,6 +55,10 @@ struct ChangesMouseCatcher: NSViewRepresentable {
         }
 
         override func rightMouseDown(with event: NSEvent) { onRightClick?() }
+        // We claim only the right-mouse *down* (see `claimsRightClick`). AppKit still delivers the matching
+        // right-mouse *up* here via mouse capture from the down, and we intentionally don't forward it —
+        // nothing downstream consumes a right-mouse-up on these rows today. (A future `.contextMenu` or
+        // responder-chain handler on the row would need this overridden and forwarded.)
 
         // Never steal keyboard focus.
         override var acceptsFirstResponder: Bool { false }
@@ -91,14 +95,11 @@ struct ChangesMouseCatcher: NSViewRepresentable {
     }
 
     /// Whether `hitTest` should claim an in-flight event for the right-click handler — the rest falls
-    /// through to the row. Pure (reads only the event *type*) so the policy is unit-testable without a
-    /// live window, and deliberately never touches `clickCount`.
+    /// through to the row. Claims only the right-mouse *down*: the handler fires there, and leaving the
+    /// up (and everything else) unclaimed keeps the row's own responder chain intact. Pure (reads only the
+    /// event *type*) so the policy is unit-testable without a live window, and deliberately never touches
+    /// `clickCount`.
     nonisolated static func claimsRightClick(eventType: NSEvent.EventType?) -> Bool {
-        switch eventType {
-        case .rightMouseDown, .rightMouseUp:
-            return true
-        default:
-            return false
-        }
+        eventType == .rightMouseDown
     }
 }

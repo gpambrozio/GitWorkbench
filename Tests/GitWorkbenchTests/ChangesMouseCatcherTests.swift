@@ -13,9 +13,11 @@ import AppKit
 /// raises `NSInternalInconsistencyException` and previously crashed the app on launch.
 final class ChangesMouseCatcherTests: XCTestCase {
 
-    func test_claimsRightClickEvents() {
+    func test_claimsRightMouseDownOnly() {
+        // Only the down is claimed (the handler fires there). The matching up — and everything else —
+        // falls through so the row's own responder chain (e.g. a future .contextMenu) stays intact.
         XCTAssertTrue(ChangesMouseCatcher.claimsRightClick(eventType: .rightMouseDown))
-        XCTAssertTrue(ChangesMouseCatcher.claimsRightClick(eventType: .rightMouseUp))
+        XCTAssertFalse(ChangesMouseCatcher.claimsRightClick(eventType: .rightMouseUp))
     }
 
     func test_doesNotClaimLeftClicks() {

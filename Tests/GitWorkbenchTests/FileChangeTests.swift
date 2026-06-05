@@ -31,10 +31,15 @@ final class FileChangeTests: XCTestCase {
         XCTAssertEqual(url.path, "/Users/me/repo/src/commands/sync.ts")
     }
 
-    func test_urlRelativeToNilRoot_isPathOnlyFileURL() {
-        let f = FileChange(path: "package.json", status: .modified)
+    func test_urlRelativeToNilRoot_isRepoRelativeURL() {
+        let f = FileChange(path: "src/commands/sync.ts", status: .modified)
         let url = f.url(relativeTo: nil)
         XCTAssertTrue(url.isFileURL)
-        XCTAssertEqual(url.lastPathComponent, "package.json")
+        // No root to resolve against → the URL is repo-relative: relativePath preserves the path, but the
+        // absolute path is cwd-resolved (not a usable repo location), which is exactly why a host should
+        // set `repositoryURL`.
+        XCTAssertEqual(url.relativePath, "src/commands/sync.ts")
+        XCTAssertNotEqual(url.path, "src/commands/sync.ts")
+        XCTAssertTrue(url.path.hasSuffix("/src/commands/sync.ts"))
     }
 }

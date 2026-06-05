@@ -60,7 +60,7 @@ struct FileListRow: View {
         if interactions.isActive {
             ChangesMouseCatcher(
                 onRightClick: interactions.handlesRightClick ? { handleRightClick() } : nil,
-                onDoubleClick: interactions.onDoubleClick == nil ? nil : { handleDoubleClick() }
+                onDoubleClick: interactions.onDoubleClick != nil ? { handleDoubleClick() } : nil
             )
         }
     }

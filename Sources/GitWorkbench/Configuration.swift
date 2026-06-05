@@ -58,10 +58,12 @@ public struct WorkbenchConfiguration: Sendable {
     /// Dark-mode colors, used when the environment color scheme is dark.
     public var darkTheme: WorkbenchTheme = .darkStandard
     /// On-disk root of the repository's working tree. When set, the Changes-tab custom-action callbacks
-    /// (`onChangesRightClick` / `onChangesDoubleClick`) receive an absolute file URL built by resolving
-    /// each changed file's repo-relative path against this; leave nil to receive a path-only URL. The
-    /// component never touches the filesystem itself — this only shapes the URL handed to those host
-    /// callbacks (typically the same URL the host gave its `CLIGitProvider`).
+    /// (`onChangesRightClick` / `onChangesDoubleClick`) receive an **absolute** file URL built by resolving
+    /// each changed file's repo-relative path against this. When left nil the callbacks receive a
+    /// **repo-relative** URL: its absolute path resolves against the *process* working directory, not the
+    /// repository, so it isn't directly usable (e.g. don't hand it to `NSWorkspace`). Set this — typically
+    /// the same URL the host gave its `CLIGitProvider` — whenever those callbacks need a usable file URL.
+    /// The component never touches the filesystem itself; this only shapes the URL handed to the callbacks.
     public var repositoryURL: URL? = nil
 
     public init() {}

@@ -36,23 +36,34 @@ extension EnvironmentValues {
 
 public extension View {
     /// Perform a custom action when a file row in the **Changes** tab is right-clicked, receiving the
-    /// clicked file's URL. Compose freely with the popover-returning overload below and with
-    /// `onChangesDoubleClick`. The URL is absolute when the host sets `WorkbenchConfiguration.repositoryURL`.
+    /// clicked file's URL. Stacking is **additive**: applying this modifier more than once (e.g. from two
+    /// independent feature layers) runs every action, rather than the last one winning. The URL is
+    /// absolute when the host sets `WorkbenchConfiguration.repositoryURL`.
     func onChangesRightClick(_ action: @escaping (URL) -> Void) -> some View {
-        transformEnvironment(\.changesFileInteractions) { $0.onRightClick = action }
+        transformEnvironment(\.changesFileInteractions) { interactions in
+            let existing = interactions.onRightClick
+            interactions.onRightClick = { url in existing?(url); action(url) }
+        }
     }
 
     /// Show a popover anchored to a file row in the **Changes** tab when it is right-clicked. Return the
-    /// popover's content for the clicked file's URL, or `nil` to show nothing for that file.
+    /// popover's content for the clicked file's URL, or `nil` to show nothing for that file. When this
+    /// modifier is stacked, the first overlay that returns a non-nil view wins (only one popover can be
+    /// shown per row).
     func onChangesRightClick<Content: View>(_ content: @escaping (URL) -> Content?) -> some View {
         transformEnvironment(\.changesFileInteractions) { interactions in
-            interactions.rightClickPopover = { url in content(url).map { AnyView($0) } }
+            let existing = interactions.rightClickPopover
+            interactions.rightClickPopover = { url in existing?(url) ?? content(url).map { AnyView($0) } }
         }
     }
 
     /// Perform a custom action when a file row in the **Changes** tab is double-clicked, receiving the
-    /// clicked file's URL. The URL is absolute when the host sets `WorkbenchConfiguration.repositoryURL`.
+    /// clicked file's URL. Stacking is **additive** (see `onChangesRightClick`). The URL is absolute when
+    /// the host sets `WorkbenchConfiguration.repositoryURL`.
     func onChangesDoubleClick(_ action: @escaping (URL) -> Void) -> some View {
-        transformEnvironment(\.changesFileInteractions) { $0.onDoubleClick = action }
+        transformEnvironment(\.changesFileInteractions) { interactions in
+            let existing = interactions.onDoubleClick
+            interactions.onDoubleClick = { url in existing?(url); action(url) }
+        }
     }
 }

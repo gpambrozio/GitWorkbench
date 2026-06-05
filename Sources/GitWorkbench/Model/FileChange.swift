@@ -37,8 +37,12 @@ public struct FileChange: Identifiable, Hashable, Sendable {
     }
 
     /// The file's location on disk, resolving the repo-relative `path` against `root` (the repository's
-    /// working-tree root, supplied by the host via `WorkbenchConfiguration.repositoryURL`). When `root`
-    /// is nil the result is a path-only file URL — useful enough for a host that knows its own root.
+    /// working-tree root, supplied by the host via `WorkbenchConfiguration.repositoryURL`).
+    ///
+    /// When `root` is nil the path can't be made absolute here, so the result is a **repo-relative** file
+    /// URL: its `relativePath` is `path`, but its absolute `path` resolves against the *process* working
+    /// directory (not the repo) and is therefore not a usable location — don't hand it straight to
+    /// `NSWorkspace`. A host that leaves `repositoryURL` nil must resolve the URL against its own root.
     func url(relativeTo root: URL?) -> URL {
         guard let root else { return URL(filePath: path) }
         return root.appending(path: path)
