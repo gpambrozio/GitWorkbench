@@ -32,6 +32,7 @@ final class AppModel: ObservableObject {
         var configuration = WorkbenchConfiguration()
         configuration.persistenceKey = "LiveDemo"
         configuration.layoutStore = .userDefaults
+        configuration.repositoryURL = url   // so the Changes custom-action callbacks get absolute file URLs
         let theme = DemoThemes.named(themeName)
         configuration.theme = theme.light
         configuration.darkTheme = theme.dark
@@ -129,11 +130,42 @@ extension WorkbenchLayoutStore {
 }
 
 /// Roots the live view on `AppModel` so swapping the repository rebuilds the UI against the new store.
+///
+/// Also demonstrates issue #1's custom-action hooks on the Changes tab: double-click opens the file in
+/// its default app, and right-click shows a small popover (and logs the path). Because the store's
+/// `repositoryURL` is set, every callback receives an absolute file URL.
 struct RootView: View {
     @ObservedObject var app: AppModel
     var body: some View {
         GitWorkbenchView(store: app.store)
+            .onChangesDoubleClick { url in NSWorkspace.shared.open(url) }
+            .onChangesRightClick { url in print("Changes right-click: \(url.path)") }
+            .onChangesRightClick { (url: URL) in ChangesFilePopover(url: url) }
             .frame(minWidth: 1080, minHeight: 660)
+    }
+}
+
+/// A tiny popover shown when a Changes-tab file row is right-clicked — demonstrates the
+/// `onChangesRightClick { (URL) -> some View? }` overload.
+private struct ChangesFilePopover: View {
+    let url: URL
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(url.lastPathComponent).font(.headline)
+            Text(url.deletingLastPathComponent().path)
+                .font(.caption).foregroundStyle(.secondary)
+                .lineLimit(2).truncationMode(.middle)
+            Divider()
+            Button { NSWorkspace.shared.activateFileViewerSelecting([url]) } label: {
+                Label("Reveal in Finder", systemImage: "folder")
+            }
+            Button { NSWorkspace.shared.open(url) } label: {
+                Label("Open", systemImage: "arrow.up.forward.app")
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(14)
+        .frame(width: 260)
     }
 }
 

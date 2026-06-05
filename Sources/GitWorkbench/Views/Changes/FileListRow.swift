@@ -4,8 +4,20 @@ import SwiftUI
 struct FileListRow: View {
     @ObservedObject var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
+    @Environment(\.changesFileInteractions) private var interactions
     @State private var hover = false
+    @State private var popover: PopoverContent?
     let file: FileChange
+
+    /// Identifiable box so the host's right-click popover content can drive `.popover(item:)`.
+    private struct PopoverContent: Identifiable {
+        let id = UUID()
+        let view: AnyView
+    }
+
+    /// The clicked file's URL handed to the host's custom-action callbacks (absolute when the host set
+    /// `WorkbenchConfiguration.repositoryURL`, otherwise path-only).
+    private var fileURL: URL { file.url(relativeTo: store.configuration.repositoryURL) }
 
     var body: some View {
         let selected = store.state.selectedFileID == file.id
@@ -38,6 +50,31 @@ struct FileListRow: View {
         .contentShape(Rectangle())
         .onTapGesture { store.select(file: file.id) }
         .onHover { hover = $0 }
+        .overlay { mouseCatcher }
+        .popover(item: $popover, arrowEdge: .trailing) { $0.view }
+    }
+
+    /// The opt-in right-click / double-click catcher — installed only when the host wired up a handler,
+    /// so default behavior is untouched. Right-click fires the action and/or opens the host popover.
+    @ViewBuilder private var mouseCatcher: some View {
+        if interactions.isActive {
+            ChangesMouseCatcher(
+                onRightClick: interactions.handlesRightClick ? { handleRightClick() } : nil,
+                onDoubleClick: interactions.onDoubleClick == nil ? nil : { handleDoubleClick() }
+            )
+        }
+    }
+
+    private func handleRightClick() {
+        let url = fileURL
+        interactions.onRightClick?(url)
+        if let make = interactions.rightClickPopover, let view = make(url) {
+            popover = PopoverContent(view: view)
+        }
+    }
+
+    private func handleDoubleClick() {
+        interactions.onDoubleClick?(fileURL)
     }
 
     @ViewBuilder private func trailing(selected: Bool) -> some View {

@@ -35,4 +35,12 @@ public struct FileChange: Identifiable, Hashable, Sendable {
         self.additions = additions
         self.deletions = deletions
     }
+
+    /// The file's location on disk, resolving the repo-relative `path` against `root` (the repository's
+    /// working-tree root, supplied by the host via `WorkbenchConfiguration.repositoryURL`). When `root`
+    /// is nil the result is a path-only file URL — useful enough for a host that knows its own root.
+    func url(relativeTo root: URL?) -> URL {
+        guard let root else { return URL(filePath: path) }
+        return root.appending(path: path)
+    }
 }

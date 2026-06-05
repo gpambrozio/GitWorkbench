@@ -31,6 +31,8 @@ The package ships two libraries:
 - **Stash** — apply / pop / drop.
 - **Resizable columns** (persisted via a host-supplied store), **customizable light + dark themes**
   (swappable at runtime), and a draggable horizontal scroll for long diff lines.
+- **Custom file actions** — right-click a Changes-tab file to run an action or show your own popover,
+  or double-click to run an action; each callback receives the file's URL.
 - macOS 15+, Swift 6 (language mode v6).
 
 ## Screenshots
@@ -136,6 +138,32 @@ config.showsToolbar = true
 
 let store = GitWorkbenchStore(provider: myProvider, configuration: config)
 ```
+
+### Custom file actions (Changes tab)
+
+Attach actions to file rows in the **Changes** tab with view modifiers on `GitWorkbenchView`. Each
+callback receives the clicked file's `URL` — absolute when you set `config.repositoryURL` to the
+repository's working-tree root (typically the same URL you gave `CLIGitProvider`), otherwise a
+path-only URL.
+
+```swift
+var config = WorkbenchConfiguration()
+config.repositoryURL = repoURL          // so callbacks get absolute file URLs
+
+GitWorkbenchView(store: store)
+    .onChangesDoubleClick { url in       // run an action on double-click
+        NSWorkspace.shared.open(url)
+    }
+    .onChangesRightClick { url in        // run an action on right-click
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+    .onChangesRightClick { url in        // …or return a View to show as a popover (nil = nothing)
+        FileActionsMenu(url: url)
+    }
+```
+
+Everything is opt-in: with no modifier attached, rows behave exactly as before (single-click still
+selects, the stage box and hover are untouched).
 
 ### Theming
 

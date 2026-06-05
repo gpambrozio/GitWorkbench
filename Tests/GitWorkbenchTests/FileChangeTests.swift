@@ -23,4 +23,18 @@ final class FileChangeTests: XCTestCase {
         XCTAssertEqual(f.id, "src/index.ts:staged")
         XCTAssertEqual(f.name, "index.ts")
     }
+
+    func test_urlRelativeToRoot_resolvesAgainstRepositoryRoot() {
+        let f = FileChange(path: "src/commands/sync.ts", status: .modified)
+        let url = f.url(relativeTo: URL(filePath: "/Users/me/repo"))
+        XCTAssertTrue(url.isFileURL)
+        XCTAssertEqual(url.path, "/Users/me/repo/src/commands/sync.ts")
+    }
+
+    func test_urlRelativeToNilRoot_isPathOnlyFileURL() {
+        let f = FileChange(path: "package.json", status: .modified)
+        let url = f.url(relativeTo: nil)
+        XCTAssertTrue(url.isFileURL)
+        XCTAssertEqual(url.lastPathComponent, "package.json")
+    }
 }

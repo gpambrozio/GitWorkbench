@@ -1,4 +1,4 @@
-import CoreGraphics
+import Foundation
 
 public enum WorkspaceView: String, CaseIterable, Sendable, Hashable {
     case changes, history, stashes
@@ -57,6 +57,12 @@ public struct WorkbenchConfiguration: Sendable {
     public var theme: WorkbenchTheme = .standard
     /// Dark-mode colors, used when the environment color scheme is dark.
     public var darkTheme: WorkbenchTheme = .darkStandard
+    /// On-disk root of the repository's working tree. When set, the Changes-tab custom-action callbacks
+    /// (`onChangesRightClick` / `onChangesDoubleClick`) receive an absolute file URL built by resolving
+    /// each changed file's repo-relative path against this; leave nil to receive a path-only URL. The
+    /// component never touches the filesystem itself — this only shapes the URL handed to those host
+    /// callbacks (typically the same URL the host gave its `CLIGitProvider`).
+    public var repositoryURL: URL? = nil
 
     public init() {}
 }
