@@ -5,6 +5,7 @@ public struct GitWorkbenchView: View {
     @ObservedObject private var store: GitWorkbenchStore
     @StateObject private var layout: ColumnLayout
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.repositorySummaryObserver) private var summaryObserver
 
     public init(store: GitWorkbenchStore) {
         self.store = store
@@ -33,6 +34,9 @@ public struct GitWorkbenchView: View {
         .foregroundStyle(theme.ink)
         .workbenchTheme(theme)
         .overlay(alignment: .bottom) { toastOverlay }
+        .onChange(of: RepositorySummary(state: store.state), initial: true) { _, summary in
+            summaryObserver.onChange?(summary)
+        }
         .task { await store.reload() }
     }
 
