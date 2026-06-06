@@ -36,6 +36,11 @@ public extension View {
     /// swap re-mounts it), then once each time the summary actually changes. Identical summaries are
     /// deduplicated, so it never fires twice for the same value.
     ///
+    /// Note: the very first fire may reflect the pre-load empty state (`repositoryName`/`currentBranch`
+    /// `== ""`, `isClean == true`) before the initial repository load completes; the loaded summary
+    /// fires immediately after. A host driving a window title or badge can guard on this (e.g. skip while
+    /// `repositoryName` is empty) or debounce if the momentary placeholder matters.
+    ///
     /// Stacking is **additive**: applying this modifier more than once (e.g. from two independent feature
     /// layers) runs every observer, rather than the last one winning.
     func onRepositorySummaryChange(_ action: @escaping (RepositorySummary) -> Void) -> some View {

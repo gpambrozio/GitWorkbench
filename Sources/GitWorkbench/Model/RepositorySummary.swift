@@ -7,14 +7,16 @@ import Foundation
 /// Every field is a pure function of `WorkbenchState`; constructing one does no git work. It is
 /// `Hashable` (hence `Equatable`), which lets the modifier dedupe: the host's closure fires once with
 /// the current value, then only when a *distinct* summary appears.
+///
+/// Only the independent primitives are stored; the convenience flags (`changedFileCount`, `needsPush`,
+/// `needsPull`, `isClean`) are **computed** from them, so a summary can never be internally
+/// inconsistent and `Hashable` hashes only the underlying state.
 public struct RepositorySummary: Sendable, Hashable {
     /// Working-tree repository name (`RepositoryStatus.repositoryName`).
     public var repositoryName: String
     /// The checked-out branch (`RepositoryStatus.currentBranch`).
     public var currentBranch: String
 
-    /// Total changed files in the working tree (staged + unstaged).
-    public var changedFileCount: Int
     /// Changed files that are staged.
     public var stagedCount: Int
     /// Changed files that are not staged.
@@ -31,23 +33,26 @@ public struct RepositorySummary: Sendable, Hashable {
     public var ahead: Int
     /// Commits the local branch is behind its upstream (to pull).
     public var behind: Int
-    /// `ahead > 0` — there is something to push.
-    public var needsPush: Bool
-    /// `behind > 0` — there is something to pull.
-    public var needsPull: Bool
     /// The current branch tracks a remote upstream.
     public var hasUpstream: Bool
 
-    /// Nothing to show: no changed files and not ahead or behind the upstream.
-    public var isClean: Bool
     /// A pull/push/fetch is currently in flight.
     public var isBusy: Bool
 
-    /// Memberwise initializer (kept accessible for hosts and tests that build a summary directly).
+    /// Total changed files in the working tree (staged + unstaged).
+    public var changedFileCount: Int { stagedCount + unstagedCount }
+    /// `ahead > 0` — there is something to push.
+    public var needsPush: Bool { ahead > 0 }
+    /// `behind > 0` — there is something to pull.
+    public var needsPull: Bool { behind > 0 }
+    /// Nothing to show: no changed files and not ahead or behind the upstream.
+    public var isClean: Bool { changedFileCount == 0 && ahead == 0 && behind == 0 }
+
+    /// Memberwise initializer over the stored primitives (kept accessible for hosts and tests that build
+    /// a summary directly). The convenience flags are derived, so they can't be passed inconsistently.
     public init(
         repositoryName: String,
         currentBranch: String,
-        changedFileCount: Int,
         stagedCount: Int,
         unstagedCount: Int,
         hasConflicts: Bool,
@@ -55,15 +60,11 @@ public struct RepositorySummary: Sendable, Hashable {
         deletions: Int,
         ahead: Int,
         behind: Int,
-        needsPush: Bool,
-        needsPull: Bool,
         hasUpstream: Bool,
-        isClean: Bool,
         isBusy: Bool
     ) {
         self.repositoryName = repositoryName
         self.currentBranch = currentBranch
-        self.changedFileCount = changedFileCount
         self.stagedCount = stagedCount
         self.unstagedCount = unstagedCount
         self.hasConflicts = hasConflicts
@@ -71,33 +72,33 @@ public struct RepositorySummary: Sendable, Hashable {
         self.deletions = deletions
         self.ahead = ahead
         self.behind = behind
-        self.needsPush = needsPush
-        self.needsPull = needsPull
         self.hasUpstream = hasUpstream
-        self.isClean = isClean
         self.isBusy = isBusy
     }
 
     /// Derives the summary from the current workbench state. All counts and flags come straight from
-    /// `state.repo` (and `state.isBusy`); the single place the derivation lives.
+    /// `state.repo` (and `state.isBusy`); the single place the derivation lives. The per-file fields are
+    /// gathered in one pass over `repo.files`.
     init(state: WorkbenchState) {
         let repo = state.repo
-        let staged = repo.files.lazy.filter(\.isStaged).count
+        var staged = 0, additions = 0, deletions = 0, hasConflicts = false
+        for file in repo.files {
+            if file.isStaged { staged += 1 }
+            additions += file.additions
+            deletions += file.deletions
+            if file.status == .conflicted { hasConflicts = true }
+        }
         self.init(
             repositoryName: repo.repositoryName,
             currentBranch: repo.currentBranch,
-            changedFileCount: repo.files.count,
             stagedCount: staged,
             unstagedCount: repo.files.count - staged,
-            hasConflicts: repo.files.contains { $0.status == .conflicted },
-            additions: repo.files.reduce(0) { $0 + $1.additions },
-            deletions: repo.files.reduce(0) { $0 + $1.deletions },
+            hasConflicts: hasConflicts,
+            additions: additions,
+            deletions: deletions,
             ahead: repo.ahead,
             behind: repo.behind,
-            needsPush: repo.ahead > 0,
-            needsPull: repo.behind > 0,
             hasUpstream: repo.upstream != nil,
-            isClean: repo.files.isEmpty && repo.ahead == 0 && repo.behind == 0,
             isBusy: state.isBusy
         )
     }

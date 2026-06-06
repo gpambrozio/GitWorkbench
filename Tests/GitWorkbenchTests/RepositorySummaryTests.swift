@@ -73,4 +73,27 @@ final class RepositorySummaryTests: XCTestCase {
         XCTAssertEqual(summary.currentBranch, "feat/sync")
         XCTAssertTrue(summary.isBusy)
     }
+
+    // MARK: - Dedup contract (the equality `.onChange` relies on)
+
+    func test_equalStatesProduceEqualSummaries() {
+        let files = [FileChange(path: "a.txt", status: .modified, isStaged: true, additions: 3, deletions: 1)]
+        let a = RepositorySummary(state: makeState(files: files, ahead: 1, upstream: "origin/main"))
+        let b = RepositorySummary(state: makeState(files: files, ahead: 1, upstream: "origin/main"))
+        XCTAssertEqual(a, b)
+    }
+
+    func test_isBusyDistinguishesSummaries() {
+        // isBusy is the one field sourced from `state` rather than `repo`; a regression that dropped it
+        // from the derivation would leave these equal and silently break dedup.
+        let idle = RepositorySummary(state: makeState(isBusy: false))
+        let busy = RepositorySummary(state: makeState(isBusy: true))
+        XCTAssertNotEqual(idle, busy)
+    }
+
+    func test_aheadDistinguishesSummaries() {
+        let synced = RepositorySummary(state: makeState(ahead: 0, upstream: "origin/main"))
+        let ahead = RepositorySummary(state: makeState(ahead: 1, upstream: "origin/main"))
+        XCTAssertNotEqual(synced, ahead)
+    }
 }
