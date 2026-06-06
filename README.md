@@ -157,7 +157,7 @@ GitWorkbenchView(store: store)
     .onChangesRightClick { url in        // run an action on right-click
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
-    .onChangesRightClick { url in        // …or return a View to show as a popover (nil = nothing)
+    .onChangesRightClickPopover { url in // …or return a View to show as a popover (nil = nothing)
         FileActionsMenu(url: url)
     }
 ```

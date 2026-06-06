@@ -4,7 +4,7 @@ import SwiftUI
 /// (mirroring `\.workbenchTheme`) and read by `FileListRow`. Everything is opt-in: an unset closure
 /// means "no behavior", and the row installs its AppKit mouse catcher only when at least one is set,
 /// so a host that uses none pays nothing and behaves exactly as before. Populated by the public
-/// `onChangesRightClick` / `onChangesDoubleClick` view modifiers below.
+/// `onChangesRightClick` / `onChangesRightClickPopover` / `onChangesDoubleClick` view modifiers below.
 ///
 /// `@unchecked Sendable`: it stores host closures (not themselves `Sendable`), but the value is only
 /// ever read in a SwiftUI view body and invoked from the row's AppKit mouse catcher — both on the main
@@ -49,8 +49,9 @@ public extension View {
     /// Show a popover anchored to a file row in the **Changes** tab when it is right-clicked. Return the
     /// popover's content for the clicked file's URL, or `nil` to show nothing for that file. When this
     /// modifier is stacked, the first overlay that returns a non-nil view wins (only one popover can be
-    /// shown per row).
-    func onChangesRightClick<Content: View>(_ content: @escaping (URL) -> Content?) -> some View {
+    /// shown per row). Named distinctly from `onChangesRightClick(_:)` (the action overload) so the two
+    /// don't resolve purely by closure return type, which made callers add an explicit `(URL)` annotation.
+    func onChangesRightClickPopover<Content: View>(_ content: @escaping (URL) -> Content?) -> some View {
         transformEnvironment(\.changesFileInteractions) { interactions in
             let existing = interactions.rightClickPopover
             interactions.rightClickPopover = { url in existing?(url) ?? content(url).map { AnyView($0) } }

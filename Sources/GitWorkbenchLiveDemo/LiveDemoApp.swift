@@ -140,13 +140,13 @@ struct RootView: View {
         GitWorkbenchView(store: app.store)
             .onChangesDoubleClick { url in NSWorkspace.shared.open(url) }
             .onChangesRightClick { url in print("Changes right-click: \(url.path)") }
-            .onChangesRightClick { (url: URL) in ChangesFilePopover(url: url) }
+            .onChangesRightClickPopover { url in ChangesFilePopover(url: url) }
             .frame(minWidth: 1080, minHeight: 660)
     }
 }
 
 /// A tiny popover shown when a Changes-tab file row is right-clicked — demonstrates the
-/// `onChangesRightClick { (URL) -> some View? }` overload.
+/// `onChangesRightClickPopover { (URL) -> some View? }` modifier.
 private struct ChangesFilePopover: View {
     let url: URL
     var body: some View {

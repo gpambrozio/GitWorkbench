@@ -7,7 +7,14 @@ struct FileListRow: View {
     @Environment(\.changesFileInteractions) private var interactions
     @State private var hover = false
     @State private var popover: PopoverContent?
+    /// Row-local frames of the interactive sub-controls (stage box / discard button) that a double-click
+    /// must skip — measured via `changesRowDoubleClickExcluded(in:)` and handed to the mouse catcher.
+    @State private var doubleClickExclusions: [CGRect] = []
     let file: FileChange
+
+    /// Name of the row's coordinate space; sub-control frames are reported in it, and the (flipped) mouse
+    /// catcher overlay shares its origin, so the two line up for the double-click exclusion check.
+    private static let rowSpace = "ChangesFileRow"
 
     /// Identifiable box so the host's right-click popover content can drive `.popover(item:)`.
     private struct PopoverContent: Identifiable {
@@ -25,6 +32,7 @@ struct FileListRow: View {
             StageBox(checked: file.isStaged)
                 .contentShape(Rectangle())
                 .onTapGesture { Task { await store.toggleStage(file.id) } }
+                .changesRowDoubleClickExcluded(in: Self.rowSpace)
             StatusGlyph(status: file.status, selected: selected, size: 15)
             Text(file.name)
                 .font(.system(size: 12.5, weight: .medium))
@@ -50,7 +58,9 @@ struct FileListRow: View {
         .contentShape(Rectangle())
         .onTapGesture { store.select(file: file.id) }
         .onHover { hover = $0 }
+        .coordinateSpace(.named(Self.rowSpace))
         .overlay { mouseCatcher }
+        .onPreferenceChange(DoubleClickExcludedFramesKey.self) { doubleClickExclusions = $0 }
         .popover(item: $popover, arrowEdge: .trailing) { $0.view }
     }
 
@@ -60,7 +70,8 @@ struct FileListRow: View {
         if interactions.isActive {
             ChangesMouseCatcher(
                 onRightClick: interactions.handlesRightClick ? { handleRightClick() } : nil,
-                onDoubleClick: interactions.onDoubleClick != nil ? { handleDoubleClick() } : nil
+                onDoubleClick: interactions.onDoubleClick != nil ? { handleDoubleClick() } : nil,
+                doubleClickExclusions: doubleClickExclusions
             )
         }
     }
@@ -88,6 +99,7 @@ struct FileListRow: View {
                                 in: RoundedRectangle(cornerRadius: 5))
             }
             .buttonStyle(.plain)
+            .changesRowDoubleClickExcluded(in: Self.rowSpace)
         } else {
             stats(selected: selected)
         }
@@ -111,5 +123,28 @@ struct FileListRow: View {
         if selected { return theme.accent }
         if hover { return Color.black.opacity(0.04) }
         return .clear
+    }
+}
+
+/// Collects the row-local frames of interactive sub-controls so the mouse catcher can skip them for
+/// double-clicks. SwiftUI `Button`s / tap gestures have no distinct backing `NSView` (AppKit `hitTest`
+/// resolves them all to the shared hosting view), so the catcher can't tell them apart at the click
+/// point — it relies on these measured frames instead. A control's frame drops out of the set when the
+/// control leaves the tree (e.g. the hover-only discard button), so nothing stale is excluded.
+private struct DoubleClickExcludedFramesKey: PreferenceKey {
+    static let defaultValue: [CGRect] = []
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) { value += nextValue() }
+}
+
+private extension View {
+    /// Marks this sub-control's frame (in the named row coordinate space) as excluded from the row's
+    /// double-click hit area, so a double-tap on it doesn't also fire the host's double-click action.
+    func changesRowDoubleClickExcluded(in space: String) -> some View {
+        background(
+            GeometryReader { geo in
+                Color.clear.preference(key: DoubleClickExcludedFramesKey.self,
+                                       value: [geo.frame(in: .named(space))])
+            }
+        )
     }
 }

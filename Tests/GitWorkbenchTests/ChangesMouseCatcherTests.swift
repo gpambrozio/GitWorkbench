@@ -39,4 +39,37 @@ final class ChangesMouseCatcherTests: XCTestCase {
     func test_doesNotClaimWhenNoCurrentEvent() {
         XCTAssertFalse(ChangesMouseCatcher.claimsRightClick(eventType: nil))
     }
+
+    // MARK: - Double-click exclusion policy
+
+    // A typical row: 400×28, with the stage box at the leading edge and a hover discard button trailing.
+    private let rowBounds = CGRect(x: 0, y: 0, width: 400, height: 28)
+    private let stageBox = CGRect(x: 12, y: 6, width: 15, height: 15)
+    private let discard = CGRect(x: 368, y: 4, width: 20, height: 20)
+
+    func test_firesDoubleClick_overRowBody() {
+        // The filename / empty middle of the row: nothing excluded there, so the host action fires.
+        XCTAssertTrue(ChangesMouseCatcher.firesDoubleClick(at: CGPoint(x: 150, y: 14),
+                                                           in: rowBounds, excluding: [stageBox, discard]))
+    }
+
+    func test_doesNotFireDoubleClick_overInteractiveSubControls() {
+        // Over the stage box or the discard button the host action must NOT fire — those controls own the
+        // double-tap (e.g. it would otherwise toggle staging twice *and* open the file).
+        XCTAssertFalse(ChangesMouseCatcher.firesDoubleClick(at: CGPoint(x: 19, y: 14),
+                                                            in: rowBounds, excluding: [stageBox, discard]))
+        XCTAssertFalse(ChangesMouseCatcher.firesDoubleClick(at: CGPoint(x: 378, y: 14),
+                                                            in: rowBounds, excluding: [stageBox, discard]))
+    }
+
+    func test_doesNotFireDoubleClick_outsideRowBounds() {
+        XCTAssertFalse(ChangesMouseCatcher.firesDoubleClick(at: CGPoint(x: 500, y: 14),
+                                                            in: rowBounds, excluding: []))
+    }
+
+    func test_firesDoubleClick_overRowBody_whenNothingExcluded() {
+        // No exclusions reported yet (e.g. before the sub-control frames are measured): still fires inside.
+        XCTAssertTrue(ChangesMouseCatcher.firesDoubleClick(at: CGPoint(x: 19, y: 14),
+                                                           in: rowBounds, excluding: []))
+    }
 }
