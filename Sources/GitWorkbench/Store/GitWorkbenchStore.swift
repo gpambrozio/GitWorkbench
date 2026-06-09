@@ -23,8 +23,29 @@ public final class GitWorkbenchStore: ObservableObject {
         )
         var initial = WorkbenchState(repo: emptyRepo)
         initial.activeView = configuration.initialView
-        initial.diffMode = configuration.defaultDiffMode
+        // Restore the saved diff presentation (same host store as column widths), falling
+        // back to the configured default when nothing is persisted.
+        initial.diffMode = Self.loadDiffMode(configuration) ?? configuration.defaultDiffMode
         self.state = initial
+    }
+
+    // MARK: Diff-mode persistence
+    //
+    // Persisted through the host's `WorkbenchLayoutStore` — the same mechanism as the
+    // resizable column widths — under a key sibling to the widths' so the two never clobber
+    // each other. Encoded numerically because the store round-trips `[String: CGFloat]`.
+
+    private static func diffModeKey(_ configuration: WorkbenchConfiguration) -> String {
+        "\(configuration.persistenceKey ?? "").diffMode"
+    }
+
+    private static func loadDiffMode(_ configuration: WorkbenchConfiguration) -> DiffMode? {
+        guard let raw = configuration.layoutStore?.load(diffModeKey(configuration))?["mode"] else { return nil }
+        return raw == 0 ? .unified : .split
+    }
+
+    private func saveDiffMode(_ mode: DiffMode) {
+        configuration.layoutStore?.save(Self.diffModeKey(configuration), ["mode": mode == .split ? 1 : 0])
     }
 
     // MARK: Loading
@@ -83,7 +104,10 @@ public final class GitWorkbenchStore: ObservableObject {
     // MARK: Selection (synchronous intents)
 
     public func select(_ view: WorkspaceView) { state.activeView = view }
-    public func setDiffMode(_ mode: DiffMode) { state.diffMode = mode }
+    public func setDiffMode(_ mode: DiffMode) {
+        state.diffMode = mode
+        saveDiffMode(mode)
+    }
     public func setCommitMessage(_ text: String) { state.commitMessage = text }
 
     /// Swap the light + dark color themes at runtime (recolors immediately, no reload).

@@ -7,6 +7,64 @@ final class StoreReducerTests: XCTestCase {
         GitWorkbenchStore(provider: MockGitProvider(delay: .zero))
     }
 
+    /// Reference-backed layout store so a second consumer sees the first's writes.
+    private final class MemoryLayoutStore: @unchecked Sendable {
+        var data: [String: [String: CGFloat]] = [:]
+        var asLayoutStore: WorkbenchLayoutStore {
+            WorkbenchLayoutStore(load: { [self] key in data[key] },
+                                 save: { [self] key, widths in data[key] = widths })
+        }
+    }
+
+    private func config(key: String?, store: WorkbenchLayoutStore?) -> WorkbenchConfiguration {
+        var c = WorkbenchConfiguration()
+        c.persistenceKey = key
+        c.layoutStore = store
+        return c   // defaultDiffMode stays .split
+    }
+
+    private func makeStore(_ config: WorkbenchConfiguration) -> GitWorkbenchStore {
+        GitWorkbenchStore(provider: MockGitProvider(delay: .zero), configuration: config)
+    }
+
+    func test_diffModePersistsAndRestores() {
+        let mem = MemoryLayoutStore()
+        let a = makeStore(config(key: "repo1", store: mem.asLayoutStore))
+        XCTAssertEqual(a.state.diffMode, .split)   // default
+
+        a.setDiffMode(.unified)
+
+        let b = makeStore(config(key: "repo1", store: mem.asLayoutStore))
+        XCTAssertEqual(b.state.diffMode, .unified)   // restored from persistence
+    }
+
+    func test_diffModeNotPersistedWithoutStore() {
+        let a = makeStore(config(key: "repo1", store: nil))
+        a.setDiffMode(.unified)
+
+        let b = makeStore(config(key: "repo1", store: nil))
+        XCTAssertEqual(b.state.diffMode, .split)   // in-session only → default
+    }
+
+    func test_diffModePersistenceDoesNotClobberColumnWidths() {
+        let mem = MemoryLayoutStore()
+        let cfg = config(key: "repo1", store: mem.asLayoutStore)
+
+        // ColumnLayout persists widths under the bare key.
+        let layout = ColumnLayout(configuration: cfg)
+        layout.railWidth = 333
+
+        // The store persists diffMode under a sibling key — must not drop the widths.
+        let store = makeStore(cfg)
+        store.setDiffMode(.unified)
+
+        let restoredLayout = ColumnLayout(configuration: cfg)
+        XCTAssertEqual(restoredLayout.railWidth, 333)   // widths survive
+
+        let restoredStore = makeStore(cfg)
+        XCTAssertEqual(restoredStore.state.diffMode, .unified)   // diff mode survives too
+    }
+
     func test_reloadPopulatesState() async {
         let store = makeStore()
         await store.reload()
