@@ -145,4 +145,23 @@ final class CLIGitProviderTests: XCTestCase {
         let older = try await provider.loadHistory(of: nil, before: commits[0].id, limit: 10)
         XCTAssertTrue(older.isEmpty, "paging before the root commit must return empty, not throw")
     }
+
+    func test_repositoryChangesIsNilWhenWatchingDisabled() {
+        let provider = CLIGitProvider(repositoryURL: repo, watchesFileSystem: false)
+        XCTAssertNil(provider.repositoryChanges(), "opting out must disable the change stream")
+    }
+
+    func test_repositoryChangesEmitsWhenAFileChanges() async throws {
+        // Default provider watches the working tree.
+        let stream = try XCTUnwrap(provider.repositoryChanges())
+        let received = expectation(description: "change emitted")
+        let consumer = Task {
+            for await _ in stream { received.fulfill(); break }
+        }
+        // Let FSEvents arm, then change a file on disk (no git involved).
+        try await Task.sleep(for: .milliseconds(400))
+        try write("watched.txt", "touched\n")
+        await fulfillment(of: [received], timeout: 5)
+        consumer.cancel()
+    }
 }

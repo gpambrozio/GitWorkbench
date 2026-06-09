@@ -4,10 +4,15 @@ import GitWorkbench
 /// A `GitWorkbenchProvider` backed by the system `git` CLI. Read side here; actions in an extension.
 public struct CLIGitProvider: GitWorkbenchProvider {
     let runner: GitRunner
+    /// When true (the default), `repositoryChanges()` vends an FSEvents-backed stream so the
+    /// store auto-reloads on external edits/commits. Set false to opt out (e.g. a host that
+    /// drives its own refresh).
+    let watchesFileSystem: Bool
     static let logFormat = "%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%cI%x1f%P%x1f%D%x1f%s%x1f%b%x1e"
 
-    public init(repositoryURL: URL, gitPath: String = "/usr/bin/git") {
+    public init(repositoryURL: URL, gitPath: String = "/usr/bin/git", watchesFileSystem: Bool = true) {
         self.runner = GitRunner(repositoryURL: repositoryURL, gitPath: gitPath)
+        self.watchesFileSystem = watchesFileSystem
     }
 
     /// Throws `GitError.notARepository` unless the directory is a git work tree.
@@ -20,6 +25,19 @@ public struct CLIGitProvider: GitWorkbenchProvider {
     }
 
     // MARK: GitWorkbenchDataSource
+
+    /// FSEvents-backed change stream so the store reloads on external edits/commits/branch
+    /// switches. The watcher is owned by the stream and torn down when the consumer stops
+    /// (the store cancels its subscription on deinit). `nil` when watching is opted out.
+    public func repositoryChanges() -> AsyncStream<Void>? {
+        guard watchesFileSystem else { return nil }
+        let url = runner.repositoryURL
+        return AsyncStream { continuation in
+            let watcher = RepositoryWatcher(url: url) { continuation.yield(()) }
+            watcher.start()
+            continuation.onTermination = { _ in watcher.stop() }
+        }
+    }
 
     public func loadStatus() async throws -> RepositoryStatus {
         let porcelain = try await runner.output(["status", "--porcelain=v2", "--branch", "-z"]).text
