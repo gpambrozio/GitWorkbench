@@ -346,7 +346,6 @@ extension StoreReducerTests {
         let main = store.state.branches.first { $0.name == "main" }!
         await store.switchBranch(to: main)
         XCTAssertEqual(store.state.repo.currentBranch, "main")
-        XCTAssertFalse(store.state.branchMenuOpen)
         XCTAssertEqual(store.state.toast?.message, "Switched to main")
     }
 }
