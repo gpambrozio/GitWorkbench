@@ -47,8 +47,15 @@ requires). Every field is a pure function of `WorkbenchState` — no new git wor
 | `isClean` | `Bool` | no changed files **and** `ahead == 0` **and** `behind == 0` |
 | `isBusy` | `Bool` | `state.isBusy` (a pull/push/fetch in flight) |
 
-- Internal `init(state: WorkbenchState)` does all the deriving in one place.
-- Memberwise `init` stays accessible so tests and hosts can build one directly.
+- `init(_ status: RepositoryStatus, isBusy:)` does all the per-file deriving in one
+  pass; internal `init(state: WorkbenchState)` is a thin convenience over it.
+- The convenience flags (`changedFileCount`, `needsPush`, `needsPull`, `isClean`) are
+  **computed** from the stored primitives, so they can't be passed inconsistently and
+  `Hashable` hashes only the underlying state. The public memberwise `init` therefore
+  takes only the primitives and stays accessible for hosts and tests.
+- The store also exposes a headless `summary: RepositorySummary?` (see wiring below)
+  so a host holding the `@Observable` store can read it directly, without mounting
+  `GitWorkbenchView`.
 
 ### Modifier + environment plumbing
 
@@ -70,21 +77,28 @@ New file `Sources/GitWorkbench/Views/RepositorySummaryObserver.swift`, mirroring
 
 ### Wiring in `GitWorkbenchView`
 
-In `body`, read the environment closure, compute
-`RepositorySummary(state: store.state)`, and attach:
+The store is `@Observable` and exposes a public `summary: RepositorySummary?` that
+stays `nil` until the first successful load (`hasLoaded`) completes. `GitWorkbenchView`
+drives the host observer off that property:
 
 ```swift
-.onChange(of: summary, initial: true) { _, new in observer(new) }
+.onChange(of: store.summary, initial: true) { _, summary in
+    if let summary { observer(summary) }
+}
 ```
 
-`initial: true` delivers the current value immediately on appear (and after a repo
-swap re-mounts the view), then one call per distinct summary. Because the view
-already observes the store, its body re-evaluates on every state mutation, so
-`.onChange` sees each new summary; identical summaries are deduped for free.
+`initial: true` reads the current value immediately on appear (and after a repo
+swap re-mounts the view), then fires once per distinct summary. Because the store
+is `@Observable` and the body reads `store.summary`, the body re-evaluates on every
+state mutation, so `.onChange` sees each new summary; identical summaries are deduped
+for free.
 
-Note: the very first fire may reflect the pre-load empty state (branch `""`,
-`isClean == true`) before `.task { reload() }` completes; the loaded summary fires
-immediately after. This is expected for an observer and harmless for indicator use.
+Because `store.summary` is `nil` until the first load finishes, the `if let` guard
+means the observer fires **only once a load has completed** — the pre-load empty
+placeholder (branch `""`, `isClean == true`) is never delivered, so a host wiring a
+window title / dock badge needs no `isEmpty` guard. This is the same nil-until-loaded
+rule the headless `store.summary` follows, so the view-scoped modifier and a host that
+reads `store.summary` directly behave identically.
 
 ### Demo
 
