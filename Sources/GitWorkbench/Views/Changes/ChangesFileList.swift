@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The scrollable Staged / Changes groups (or a clean-tree empty state).
 struct ChangesFileList: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
     @State private var stagedCollapsed = false
     @State private var changesCollapsed = false

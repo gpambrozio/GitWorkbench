@@ -34,12 +34,14 @@ public extension View {
     ///
     /// The closure is called once with the current summary when the view appears (and after a repository
     /// swap re-mounts it), then once each time the summary actually changes. Identical summaries are
-    /// deduplicated, so it never fires twice for the same value.
+    /// deduplicated, so it never fires twice for the same value. It fires only once a load has
+    /// completed, so the pre-load empty placeholder is never delivered — no `repositoryName.isEmpty`
+    /// guard needed.
     ///
-    /// Note: the very first fire may reflect the pre-load empty state (`repositoryName`/`currentBranch`
-    /// `== ""`, `isClean == true`) before the initial repository load completes; the loaded summary
-    /// fires immediately after. A host driving a window title or badge can guard on this (e.g. skip while
-    /// `repositoryName` is empty) or debounce if the momentary placeholder matters.
+    /// This is the view-scoped form. A host that already holds the ``GitWorkbenchStore`` can instead
+    /// read ``GitWorkbenchStore/summary`` directly (it's `@Observable`), which also works while no
+    /// ``GitWorkbenchView`` is mounted — useful for a badge or sidebar that's visible when the git UI
+    /// isn't.
     ///
     /// Stacking is **additive**: applying this modifier more than once (e.g. from two independent feature
     /// layers) runs every observer, rather than the last one winning.

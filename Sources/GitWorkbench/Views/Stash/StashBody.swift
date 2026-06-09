@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The Stash workspace: stash list (360) + stash detail (or empty states).
 struct StashBody: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @EnvironmentObject private var layout: ColumnLayout
     @Environment(\.workbenchTheme) private var theme
 

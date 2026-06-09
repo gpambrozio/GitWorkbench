@@ -3,7 +3,7 @@ import AppKit
 
 /// The commit detail pane: metadata (summary/body/author + copy-SHA) → changed files → diff.
 struct CommitDetail: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
     let commit: Commit
 

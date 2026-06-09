@@ -1,5 +1,5 @@
-import XCTest
 @testable import GitWorkbench
+import XCTest
 
 @MainActor
 final class StoreReducerTests: XCTestCase {
@@ -20,7 +20,7 @@ final class StoreReducerTests: XCTestCase {
         var c = WorkbenchConfiguration()
         c.persistenceKey = key
         c.layoutStore = store
-        return c   // defaultDiffMode stays .split
+        return c // defaultDiffMode stays .split
     }
 
     private func makeStore(_ config: WorkbenchConfiguration) -> GitWorkbenchStore {
@@ -30,12 +30,12 @@ final class StoreReducerTests: XCTestCase {
     func test_diffModePersistsAndRestores() {
         let mem = MemoryLayoutStore()
         let a = makeStore(config(key: "repo1", store: mem.asLayoutStore))
-        XCTAssertEqual(a.state.diffMode, .split)   // default
+        XCTAssertEqual(a.state.diffMode, .split) // default
 
         a.setDiffMode(.unified)
 
         let b = makeStore(config(key: "repo1", store: mem.asLayoutStore))
-        XCTAssertEqual(b.state.diffMode, .unified)   // restored from persistence
+        XCTAssertEqual(b.state.diffMode, .unified) // restored from persistence
     }
 
     func test_diffModeNotPersistedWithoutStore() {
@@ -43,7 +43,7 @@ final class StoreReducerTests: XCTestCase {
         a.setDiffMode(.unified)
 
         let b = makeStore(config(key: "repo1", store: nil))
-        XCTAssertEqual(b.state.diffMode, .split)   // in-session only → default
+        XCTAssertEqual(b.state.diffMode, .split) // in-session only → default
     }
 
     func test_diffModePersistenceDoesNotClobberColumnWidths() {
@@ -59,10 +59,10 @@ final class StoreReducerTests: XCTestCase {
         store.setDiffMode(.unified)
 
         let restoredLayout = ColumnLayout(configuration: cfg)
-        XCTAssertEqual(restoredLayout.railWidth, 333)   // widths survive
+        XCTAssertEqual(restoredLayout.railWidth, 333) // widths survive
 
         let restoredStore = makeStore(cfg)
-        XCTAssertEqual(restoredStore.state.diffMode, .unified)   // diff mode survives too
+        XCTAssertEqual(restoredStore.state.diffMode, .unified) // diff mode survives too
     }
 
     func test_reloadPopulatesState() async {
@@ -75,11 +75,28 @@ final class StoreReducerTests: XCTestCase {
         XCTAssertEqual(store.state.branches.count, 4)
     }
 
+    func test_summaryIsNilUntilLoadedThenDerived() async {
+        let store = makeStore()
+        // Pre-load: no summary, so a host badge/branch shows nothing rather than an empty repo.
+        XCTAssertFalse(store.hasLoaded)
+        XCTAssertNil(store.summary)
+
+        await store.reload()
+
+        XCTAssertTrue(store.hasLoaded)
+        let summary = try! XCTUnwrap(store.summary)
+        XCTAssertEqual(summary.repositoryName, "aurora-cli")
+        XCTAssertEqual(summary.currentBranch, "feat/auto-sync")
+        XCTAssertEqual(summary.changedFileCount, 7)
+        // Matches deriving directly from the loaded status via the public initializer.
+        XCTAssertEqual(summary, RepositorySummary(store.state.repo, isBusy: store.state.isBusy))
+    }
+
     func test_pullRefreshesHistory() async {
         let store = makeStore()
         await store.reload()
         let before = store.state.commits.count
-        XCTAssertEqual(store.state.repo.behind, 1)   // fixture starts 1 commit behind
+        XCTAssertEqual(store.state.repo.behind, 1) // fixture starts 1 commit behind
 
         await store.pull()
 
@@ -96,13 +113,13 @@ final class StoreReducerTests: XCTestCase {
         XCTAssertEqual(store.state.activeView, .history)
         XCTAssertEqual(store.state.historyBranch, "feature-x")
         XCTAssertFalse(store.state.commits.isEmpty)
-        XCTAssertNotNil(store.state.selectedCommitID)   // tip auto-selected
+        XCTAssertNotNil(store.state.selectedCommitID) // tip auto-selected
     }
 
     func test_setThemeUpdatesConfiguration() {
         let store = makeStore()
         var custom = WorkbenchTheme.standard
-        custom.adoptsSystemAccent = true                 // a flag we can assert without Color equality
+        custom.adoptsSystemAccent = true // a flag we can assert without Color equality
         store.setTheme(light: custom, dark: custom)
         XCTAssertTrue(store.configuration.theme.adoptsSystemAccent)
         XCTAssertTrue(store.configuration.darkTheme.adoptsSystemAccent)
@@ -114,7 +131,7 @@ final class StoreReducerTests: XCTestCase {
         await store.showHistory(of: Branch(name: "feature-x"))
         XCTAssertEqual(store.state.historyBranch, "feature-x")
         await store.switchBranch(to: Branch(name: "main"))
-        XCTAssertNil(store.state.historyBranch)            // history follows the new current branch
+        XCTAssertNil(store.state.historyBranch) // history follows the new current branch
     }
 
     func test_initAppliesConfiguration() {
@@ -134,9 +151,9 @@ final class StoreReducerTests: XCTestCase {
         store.setDiffMode(.unified)
         XCTAssertEqual(store.state.diffMode, .unified)
         store.setCommitMessage("hello")
-        XCTAssertTrue(store.state.canCommit)        // 3 staged + message
+        XCTAssertTrue(store.state.canCommit) // 3 staged + message
         store.setCommitMessage("   \n ")
-        XCTAssertFalse(store.state.canCommit)        // blank message
+        XCTAssertFalse(store.state.canCommit) // blank message
     }
 
     func test_selectFileLoadsWorkingDiff() async {
@@ -161,21 +178,21 @@ final class StoreReducerTests: XCTestCase {
 struct FailingProvider: GitWorkbenchProvider {
     struct Boom: Error, LocalizedError { var errorDescription: String? { "boom" } }
     func loadStatus() async throws -> RepositoryStatus { Fixtures.repositoryStatus }
-    func loadHistory(of ref: String?, before: Commit.ID?, limit: Int) async throws -> [Commit] { Fixtures.commits }
+    func loadHistory(of _: String?, before _: Commit.ID?, limit _: Int) async throws -> [Commit] { Fixtures.commits }
     func loadStashes() async throws -> [Stash] { Fixtures.stashes }
     func loadBranches() async throws -> [Branch] { Fixtures.branches }
-    func loadDiff(_ request: DiffRequest) async throws -> FileDiff { throw Boom() }
-    func stage(_ files: [FileChange]) async throws { throw Boom() }
-    func unstage(_ files: [FileChange]) async throws { throw Boom() }
-    func discard(_ file: FileChange) async throws { throw Boom() }
-    func commit(message: String, staged: [FileChange]) async throws -> Commit { throw Boom() }
+    func loadDiff(_: DiffRequest) async throws -> FileDiff { throw Boom() }
+    func stage(_: [FileChange]) async throws { throw Boom() }
+    func unstage(_: [FileChange]) async throws { throw Boom() }
+    func discard(_: FileChange) async throws { throw Boom() }
+    func commit(message _: String, staged _: [FileChange]) async throws -> Commit { throw Boom() }
     func pull() async throws -> SyncResult { throw Boom() }
     func push() async throws -> SyncResult { throw Boom() }
     func fetch() async throws -> SyncResult { throw Boom() }
-    func switchBranch(to branch: Branch) async throws { throw Boom() }
-    func applyStash(_ stash: Stash) async throws { throw Boom() }
-    func popStash(_ stash: Stash) async throws { throw Boom() }
-    func dropStash(_ stash: Stash) async throws { throw Boom() }
+    func switchBranch(to _: Branch) async throws { throw Boom() }
+    func applyStash(_: Stash) async throws { throw Boom() }
+    func popStash(_: Stash) async throws { throw Boom() }
+    func dropStash(_: Stash) async throws { throw Boom() }
 }
 
 extension StoreReducerTests {
@@ -243,7 +260,7 @@ extension StoreReducerTests {
         let store = makeStore()
         await store.reload()
         let commitsBefore = store.state.commits.count
-        await store.commit()  // no message → guarded
+        await store.commit() // no message → guarded
         XCTAssertEqual(store.state.commits.count, commitsBefore)
     }
 }
@@ -274,7 +291,7 @@ extension StoreReducerTests {
         await store.reload()
         let stash = store.state.stashes[0]
         await store.applyStash(stash.id)
-        XCTAssertEqual(store.state.stashes.count, 2)   // kept
+        XCTAssertEqual(store.state.stashes.count, 2) // kept
         XCTAssertTrue(store.state.toast!.message.contains("Applied"))
     }
 

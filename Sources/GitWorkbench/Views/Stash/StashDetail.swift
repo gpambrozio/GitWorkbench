@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The stash detail pane: header (ref/message + Apply/Pop/Drop) → changed files → diff.
 struct StashDetail: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
     let stash: Stash
 

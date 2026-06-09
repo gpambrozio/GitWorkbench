@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The History workspace: commit list (360) + commit detail.
 struct HistoryBody: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @EnvironmentObject private var layout: ColumnLayout
     @Environment(\.workbenchTheme) private var theme
 

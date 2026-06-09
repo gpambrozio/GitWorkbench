@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A commit list row: graph column (line + node) + summary/refs + author/relative/sha.
 struct CommitGraphRow: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
     @State private var hover = false
     let commit: Commit

@@ -76,30 +76,35 @@ public struct RepositorySummary: Sendable, Hashable {
         self.isBusy = isBusy
     }
 
-    /// Derives the summary from the current workbench state. All counts and flags come straight from
-    /// `state.repo` (and `state.isBusy`); the single place the derivation lives. The per-file fields are
-    /// gathered in one pass over `repo.files`.
-    init(state: WorkbenchState) {
-        let repo = state.repo
+    /// Derives the summary from a ``RepositoryStatus`` (plus the in-flight `isBusy` flag). The single
+    /// place the per-file derivation lives — counts and churn are gathered in one pass over
+    /// `status.files`. Public so a host that keeps its own `RepositoryStatus` (rather than reading
+    /// ``GitWorkbenchStore/summary``) can derive an identical summary.
+    public init(_ status: RepositoryStatus, isBusy: Bool = false) {
         var staged = 0, additions = 0, deletions = 0, hasConflicts = false
-        for file in repo.files {
+        for file in status.files {
             if file.isStaged { staged += 1 }
             additions += file.additions
             deletions += file.deletions
             if file.status == .conflicted { hasConflicts = true }
         }
         self.init(
-            repositoryName: repo.repositoryName,
-            currentBranch: repo.currentBranch,
+            repositoryName: status.repositoryName,
+            currentBranch: status.currentBranch,
             stagedCount: staged,
-            unstagedCount: repo.files.count - staged,
+            unstagedCount: status.files.count - staged,
             hasConflicts: hasConflicts,
             additions: additions,
             deletions: deletions,
-            ahead: repo.ahead,
-            behind: repo.behind,
-            hasUpstream: repo.upstream != nil,
-            isBusy: state.isBusy
+            ahead: status.ahead,
+            behind: status.behind,
+            hasUpstream: status.upstream != nil,
+            isBusy: isBusy
         )
+    }
+
+    /// Derives the summary from the current workbench state. Convenience over ``init(_:isBusy:)``.
+    init(state: WorkbenchState) {
+        self.init(state.repo, isBusy: state.isBusy)
     }
 }
