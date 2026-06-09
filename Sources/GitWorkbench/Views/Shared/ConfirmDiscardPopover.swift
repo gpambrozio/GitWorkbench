@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A centered, scrimmed confirm card for the irreversible discard action.
 struct ConfirmDiscardPopover: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
     let file: FileChange
 

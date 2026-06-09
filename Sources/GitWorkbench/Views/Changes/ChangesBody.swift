@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The Changes workspace: file-list + composer pane (320), then the diff pane; discard confirm overlays.
 struct ChangesBody: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @EnvironmentObject private var layout: ColumnLayout
     @Environment(\.workbenchTheme) private var theme
 

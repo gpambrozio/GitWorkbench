@@ -71,7 +71,7 @@ struct DetailFilesBlock: View {
 
 /// A detail pane's diff area: the guarded `DiffView` for the selected file, or an empty state.
 struct DetailDiffArea: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     let selectedFileID: FileChange.ID?
 
     var body: some View {

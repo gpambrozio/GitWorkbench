@@ -2,7 +2,7 @@ import SwiftUI
 
 /// One changed-file row: stage box · status glyph · name · dir · (stats | hover-discard).
 struct FileListRow: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
     @Environment(\.changesFileInteractions) private var interactions
     @State private var hover = false

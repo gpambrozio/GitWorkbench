@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A stash list row: ref pill + message, then branch · relative · file count.
 struct StashRow: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
     @State private var hover = false
     let stash: Stash

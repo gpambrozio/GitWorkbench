@@ -121,6 +121,20 @@ struct RootView: View {
             .onChangesDoubleClick { url in NSWorkspace.shared.open(url) }
             .onChangesRightClick { url in print("Changes right-click: \(url.path)") }
             .onChangesRightClickPopover { url in ChangesFilePopover(url: url) }
+            .onRepositorySummaryChange { summary in
+                // Demonstrates issue's summary observer: reflect repo state in the window title and log it.
+                let sync = [summary.needsPush ? "\u{2191}\(summary.ahead)" : nil,
+                            summary.needsPull ? "\u{2193}\(summary.behind)" : nil]
+                    .compactMap { $0 }.joined(separator: " ")
+                let conflicts = summary.hasConflicts ? " \u{26A0}" : ""
+                let badge = summary.isClean
+                    ? "clean"
+                    : "\(summary.changedFileCount) changed\(sync.isEmpty ? "" : " \u{00B7} \(sync)")\(conflicts)"
+                print("Repository summary: \(summary.currentBranch) \u{00B7} \(badge)")
+                for window in NSApp.windows where window.isMainWindow || window.isKeyWindow {
+                    window.title = "\(summary.repositoryName) [\(summary.currentBranch)] \u{2014} \(badge)"
+                }
+            }
             .frame(minWidth: 1080, minHeight: 660)
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct CommitComposer: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
     @FocusState private var focused: Bool
 

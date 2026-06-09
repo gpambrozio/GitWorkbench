@@ -3,7 +3,7 @@ import SwiftUI
 /// The top bar: repo name · pull/push/fetch · diff-mode control. Branch switching and the
 /// History/Stashes views live in the sidebar rail, so they're not duplicated here.
 struct WorkbenchToolbar: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
 
     var body: some View {

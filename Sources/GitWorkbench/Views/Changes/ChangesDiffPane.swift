@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The diff pane: a file header (meta + stage/discard actions) over the `DiffView`, or an empty state.
 struct ChangesDiffPane: View {
-    @ObservedObject var store: GitWorkbenchStore
+    var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
 
     var body: some View {
