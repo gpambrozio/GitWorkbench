@@ -32,7 +32,9 @@ public struct CLIGitProvider: GitWorkbenchProvider {
     public func repositoryChanges() -> AsyncStream<Void>? {
         guard watchesFileSystem else { return nil }
         let url = runner.repositoryURL
-        return AsyncStream { continuation in
+        // Coalesce a backlog into a single reload: if changes arrive while the store is mid-reload,
+        // we only need to know "something changed", not how many times.
+        return AsyncStream(bufferingPolicy: .bufferingNewest(1)) { continuation in
             let watcher = RepositoryWatcher(url: url) { continuation.yield(()) }
             watcher.start()
             continuation.onTermination = { _ in watcher.stop() }
