@@ -114,6 +114,19 @@ extension MockGitProvider {
     public func pull() async throws -> SyncResult {
         await pause()
         let pulled = status.behind
+        // Simulate the fetched commits arriving at the tip of the current branch so the
+        // History view has something new to show after a pull.
+        for _ in 0..<pulled {
+            let new = Commit(
+                id: "pulled\(commits.count)", shortSHA: "pulled\(commits.count)",
+                summary: "Pulled from origin", body: "",
+                authorName: "Origin", authorEmail: "origin@example.com",
+                authorInitials: "OR", date: "Just now", relativeDate: "moments ago",
+                refs: [.head], parents: commits.first.map { [$0.shortSHA] } ?? [],
+                files: []
+            )
+            commits.insert(new, at: 0)
+        }
         status.behind = 0
         return SyncResult(ahead: status.ahead, behind: 0,
                           message: pulled > 0 ? "Pulled \(pulled) commit(s) from origin" : "Already up to date with origin")

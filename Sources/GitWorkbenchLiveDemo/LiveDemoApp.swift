@@ -14,7 +14,6 @@ final class AppModel: ObservableObject {
     @Published private(set) var store: GitWorkbenchStore
     @Published private(set) var themeName: String
     private(set) var repoURL: URL
-    private var watcher: RepositoryWatcher?
 
     private static let themeKey = "LiveDemo.theme"
 
@@ -48,10 +47,10 @@ final class AppModel: ObservableObject {
         store.setTheme(light: theme.light, dark: theme.dark)
     }
 
-    /// Initial load + start watching (interactive mode).
+    /// Initial load (interactive mode). The store auto-watches the working tree via its
+    /// `CLIGitProvider`, so external edits/commits refresh live with no wiring here.
     func start() async {
         await store.reload()
-        startWatching()
     }
 
     /// Prompt for a folder and, if chosen, open it as the repository.
@@ -68,34 +67,15 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Point the demo at `url`: swap in a fresh store, reload, and re-aim the filesystem watcher.
+    /// Point the demo at `url`: swap in a fresh store and reload. The new store's
+    /// `CLIGitProvider` starts watching the new working tree on its own.
     func open(_ url: URL) {
         guard url != repoURL else { return }
-        watcher?.stop()
-        watcher = nil
         repoURL = url
         store = Self.makeStore(for: url, themeName: themeName)
         Task { @MainActor in
             await store.reload()
-            startWatching()
         }
-    }
-
-    /// Watch the working tree and reload on any change (debounced), so external edits / commits / stashes
-    /// show up without relaunching. Also refreshes the open working-tree diff via the public `select`
-    /// intent, so editing the file you're viewing updates the diff pane, not just the file list.
-    private func startWatching() {
-        let watcher = RepositoryWatcher(url: repoURL) { [weak self] in
-            Task { @MainActor in
-                guard let self else { return }
-                await self.store.reload()
-                if self.store.state.activeView == .changes, let id = self.store.state.selectedFileID {
-                    self.store.select(file: id)
-                }
-            }
-        }
-        self.watcher = watcher
-        watcher.start()
     }
 
     /// First positional argument (skipping flags and the values of every value-taking flag); defaults to cwd.

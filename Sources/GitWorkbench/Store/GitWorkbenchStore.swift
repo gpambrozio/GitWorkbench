@@ -14,6 +14,13 @@ public final class GitWorkbenchStore: ObservableObject {
     /// In-flight diff load for the current selection (awaitable in tests).
     private(set) var diffTask: Task<Void, Never>?
 
+    /// Long-lived subscription to the provider's repository-change stream, so external
+    /// edits/commits reload the store automatically. nil until the first `reload()` starts
+    /// it; cancelled on deinit (which tears down the provider's underlying watcher).
+    private var changeObservationTask: Task<Void, Never>?
+
+    deinit { changeObservationTask?.cancel() }
+
     public init(provider: any GitWorkbenchProvider, configuration: WorkbenchConfiguration = .init()) {
         self.provider = provider
         self.configuration = configuration
@@ -23,8 +30,29 @@ public final class GitWorkbenchStore: ObservableObject {
         )
         var initial = WorkbenchState(repo: emptyRepo)
         initial.activeView = configuration.initialView
-        initial.diffMode = configuration.defaultDiffMode
+        // Restore the saved diff presentation (same host store as column widths), falling
+        // back to the configured default when nothing is persisted.
+        initial.diffMode = Self.loadDiffMode(configuration) ?? configuration.defaultDiffMode
         self.state = initial
+    }
+
+    // MARK: Diff-mode persistence
+    //
+    // Persisted through the host's `WorkbenchLayoutStore` — the same mechanism as the
+    // resizable column widths — under a key sibling to the widths' so the two never clobber
+    // each other. Encoded numerically because the store round-trips `[String: CGFloat]`.
+
+    private static func diffModeKey(_ configuration: WorkbenchConfiguration) -> String {
+        "\(configuration.persistenceKey ?? "").diffMode"
+    }
+
+    private static func loadDiffMode(_ configuration: WorkbenchConfiguration) -> DiffMode? {
+        guard let raw = configuration.layoutStore?.load(diffModeKey(configuration))?["mode"] else { return nil }
+        return raw == 0 ? .unified : .split
+    }
+
+    private func saveDiffMode(_ mode: DiffMode) {
+        configuration.layoutStore?.save(Self.diffModeKey(configuration), ["mode": mode == .split ? 1 : 0])
     }
 
     // MARK: Loading
@@ -43,6 +71,29 @@ public final class GitWorkbenchStore: ObservableObject {
             setError(error)
         }
         await reloadHistory()
+        observeRepositoryChangesIfNeeded()
+    }
+
+    /// Subscribe to the provider's repository-change stream (if it offers one) so external
+    /// edits/commits reload the store on their own. Idempotent: starts at most one
+    /// subscription, on the first reload. Each emission triggers a full `reload()`.
+    private func observeRepositoryChangesIfNeeded() {
+        guard changeObservationTask == nil, let changes = provider.repositoryChanges() else { return }
+        changeObservationTask = Task { [weak self] in
+            for await _ in changes {
+                await self?.reloadFromExternalChange()
+            }
+        }
+    }
+
+    /// Reload after an external on-disk change, also refreshing the open working-tree diff so
+    /// editing the file you're viewing updates the diff pane, not just the file list. (History
+    /// and stash diffs are immutable, so only the Changes selection can go stale.)
+    private func reloadFromExternalChange() async {
+        await reload()
+        if state.activeView == .changes, let id = state.selectedFileID {
+            select(file: id)
+        }
     }
 
     /// Loads commits for the branch being viewed in History (`historyBranch`; nil = current HEAD),
@@ -83,7 +134,10 @@ public final class GitWorkbenchStore: ObservableObject {
     // MARK: Selection (synchronous intents)
 
     public func select(_ view: WorkspaceView) { state.activeView = view }
-    public func setDiffMode(_ mode: DiffMode) { state.diffMode = mode }
+    public func setDiffMode(_ mode: DiffMode) {
+        state.diffMode = mode
+        saveDiffMode(mode)
+    }
     public func setCommitMessage(_ text: String) { state.commitMessage = text }
 
     /// Swap the light + dark color themes at runtime (recolors immediately, no reload).
@@ -241,6 +295,9 @@ extension GitWorkbenchStore {
             }
             state.repo.ahead = result.ahead
             state.repo.behind = result.behind
+            // A pull moves HEAD forward with the fetched commits, so the History view's
+            // commit list is now stale — refresh it.
+            if kind == .pull { await reloadHistory() }
             state.isBusy = false
             state.toast = .success(result.message)
         } catch {
@@ -259,7 +316,6 @@ extension GitWorkbenchStore {
     }
 
     public func switchBranch(to branch: Branch) async {
-        state.branchMenuOpen = false
         do {
             try await provider.switchBranch(to: branch)
             state.historyBranch = nil   // history follows the new current branch
@@ -281,7 +337,6 @@ struct WorkbenchMessageError: LocalizedError {
 // MARK: - Chrome intents
 
 extension GitWorkbenchStore {
-    public func setBranchMenuOpen(_ open: Bool) { state.branchMenuOpen = open }
     public func dismissToast() { state.toast = nil }
 }
 
