@@ -17,6 +17,20 @@ final class StoreReducerTests: XCTestCase {
         XCTAssertEqual(store.state.branches.count, 4)
     }
 
+    func test_pullRefreshesHistory() async {
+        let store = makeStore()
+        await store.reload()
+        let before = store.state.commits.count
+        XCTAssertEqual(store.state.repo.behind, 1)   // fixture starts 1 commit behind
+
+        await store.pull()
+
+        XCTAssertEqual(store.state.repo.behind, 0)
+        // The pulled commit must appear in History without an explicit reload.
+        XCTAssertEqual(store.state.commits.count, before + 1)
+        XCTAssertEqual(store.state.commits.first?.summary, "Pulled from origin")
+    }
+
     func test_showHistorySetsBranchAndView() async {
         let store = makeStore()
         await store.reload()

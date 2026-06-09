@@ -241,6 +241,9 @@ extension GitWorkbenchStore {
             }
             state.repo.ahead = result.ahead
             state.repo.behind = result.behind
+            // A pull moves HEAD forward with the fetched commits, so the History view's
+            // commit list is now stale — refresh it.
+            if kind == .pull { await reloadHistory() }
             state.isBusy = false
             state.toast = .success(result.message)
         } catch {
