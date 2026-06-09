@@ -316,7 +316,6 @@ extension GitWorkbenchStore {
     }
 
     public func switchBranch(to branch: Branch) async {
-        state.branchMenuOpen = false
         do {
             try await provider.switchBranch(to: branch)
             state.historyBranch = nil   // history follows the new current branch
@@ -338,7 +337,6 @@ struct WorkbenchMessageError: LocalizedError {
 // MARK: - Chrome intents
 
 extension GitWorkbenchStore {
-    public func setBranchMenuOpen(_ open: Bool) { state.branchMenuOpen = open }
     public func dismissToast() { state.toast = nil }
 }
 

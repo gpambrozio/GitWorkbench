@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The top bar: repo name · pull/push/fetch · branch pill · History/Stash toggles · diff-mode control.
+/// The top bar: repo name · pull/push/fetch · diff-mode control. Branch switching and the
+/// History/Stashes views live in the sidebar rail, so they're not duplicated here.
 struct WorkbenchToolbar: View {
     @ObservedObject var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
@@ -23,11 +24,6 @@ struct WorkbenchToolbar: View {
                     .disabled(s.isBusy)
                 ToolButton(icon: IconLibrary.fetch, label: "Fetch") { Task { await store.fetch() } }
                     .disabled(s.isBusy)
-                Rectangle().fill(theme.sep).frame(width: 1, height: 22).padding(.horizontal, 4)
-                BranchPill(name: s.repo.currentBranch) { store.setBranchMenuOpen(!s.branchMenuOpen) }
-                    .popover(isPresented: branchMenu, arrowEdge: .bottom) { BranchMenu(store: store) }
-                ToolButton(icon: IconLibrary.history, active: s.activeView == .history) { store.select(.history) }
-                ToolButton(icon: IconLibrary.folder, active: s.activeView == .stashes) { store.select(.stashes) }
             }
             .padding(.leading, 14)
 
@@ -44,9 +40,6 @@ struct WorkbenchToolbar: View {
         .overlay(alignment: .bottom) { Rectangle().fill(theme.sep).frame(height: 1) }
     }
 
-    private var branchMenu: Binding<Bool> {
-        Binding(get: { store.state.branchMenuOpen }, set: { store.setBranchMenuOpen($0) })
-    }
     private var diffMode: Binding<DiffMode> {
         Binding(get: { store.state.diffMode }, set: { store.setDiffMode($0) })
     }

@@ -35,7 +35,6 @@ public struct WorkbenchState: Sendable {
     // transient
     public var isBusy: Bool = false
     public var toast: Toast?
-    public var branchMenuOpen: Bool = false
 
     public init(repo: RepositoryStatus) { self.repo = repo }
 
