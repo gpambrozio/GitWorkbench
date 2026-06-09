@@ -22,6 +22,7 @@ struct ToolButton: View {
             .padding(.horizontal, 10)
             .frame(height: 28)
             .background(background, in: RoundedRectangle(cornerRadius: Tokens.buttonRadius, style: .continuous))
+            .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle())
     }
