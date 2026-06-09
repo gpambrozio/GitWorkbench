@@ -14,6 +14,13 @@ public final class GitWorkbenchStore: ObservableObject {
     /// In-flight diff load for the current selection (awaitable in tests).
     private(set) var diffTask: Task<Void, Never>?
 
+    /// Long-lived subscription to the provider's repository-change stream, so external
+    /// edits/commits reload the store automatically. nil until the first `reload()` starts
+    /// it; cancelled on deinit (which tears down the provider's underlying watcher).
+    private var changeObservationTask: Task<Void, Never>?
+
+    deinit { changeObservationTask?.cancel() }
+
     public init(provider: any GitWorkbenchProvider, configuration: WorkbenchConfiguration = .init()) {
         self.provider = provider
         self.configuration = configuration
@@ -64,6 +71,29 @@ public final class GitWorkbenchStore: ObservableObject {
             setError(error)
         }
         await reloadHistory()
+        observeRepositoryChangesIfNeeded()
+    }
+
+    /// Subscribe to the provider's repository-change stream (if it offers one) so external
+    /// edits/commits reload the store on their own. Idempotent: starts at most one
+    /// subscription, on the first reload. Each emission triggers a full `reload()`.
+    private func observeRepositoryChangesIfNeeded() {
+        guard changeObservationTask == nil, let changes = provider.repositoryChanges() else { return }
+        changeObservationTask = Task { [weak self] in
+            for await _ in changes {
+                await self?.reloadFromExternalChange()
+            }
+        }
+    }
+
+    /// Reload after an external on-disk change, also refreshing the open working-tree diff so
+    /// editing the file you're viewing updates the diff pane, not just the file list. (History
+    /// and stash diffs are immutable, so only the Changes selection can go stale.)
+    private func reloadFromExternalChange() async {
+        await reload()
+        if state.activeView == .changes, let id = state.selectedFileID {
+            select(file: id)
+        }
     }
 
     /// Loads commits for the branch being viewed in History (`historyBranch`; nil = current HEAD),

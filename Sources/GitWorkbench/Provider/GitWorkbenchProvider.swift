@@ -16,6 +16,17 @@ public protocol GitWorkbenchDataSource: Sendable {
     func loadBranches() async throws -> [Branch]
     /// The diff for one file in a given context (working tree, a commit, or a stash).
     func loadDiff(_ request: DiffRequest) async throws -> FileDiff
+
+    /// An optional stream that emits whenever the repository changes on disk (external
+    /// edits, commits, branch switches, stashes). The store subscribes to it on load and
+    /// reloads automatically, so a host gets live updates without wiring its own file
+    /// watcher. Return `nil` (the default) for providers that can't observe the
+    /// filesystem — e.g. the mock; the host can still drive refreshes via `reload()`.
+    func repositoryChanges() -> AsyncStream<Void>?
+}
+
+extension GitWorkbenchDataSource {
+    public func repositoryChanges() -> AsyncStream<Void>? { nil }
 }
 
 /// Performs git operations on behalf of the UI.
