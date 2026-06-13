@@ -93,6 +93,43 @@ final class CLIGitProviderActionTests: XCTestCase {
         XCTAssertEqual(branch, "dev")
     }
 
+    func test_checkoutRemoteBranchCreatesLocalTrackingBranch() async throws {
+        let r = GitRunner(repositoryURL: repo)
+        let origin = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("gwbremote-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: origin) }
+        _ = try await r.output(["init", "--bare", origin.path])
+        _ = try await r.output(["remote", "add", "origin", origin.path])
+        _ = try await r.output(["branch", "feature/x"])
+        _ = try await r.output(["push", "origin", "main", "feature/x"])
+        _ = try await r.output(["branch", "-D", "feature/x"]) // exists only on the remote now
+        _ = try await r.output(["fetch", "origin"])
+
+        try await provider.checkoutRemoteBranch(RemoteBranch(remote: "origin", name: "feature/x"))
+        let current = try await provider.loadStatus().currentBranch
+        XCTAssertEqual(current, "feature/x")
+        let upstream = try await r.output(["rev-parse", "--abbrev-ref", "feature/x@{upstream}"]).text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(upstream, "origin/feature/x") // the new local branch tracks the remote
+    }
+
+    func test_checkoutRemoteBranchSwitchesToExistingLocalBranch() async throws {
+        let r = GitRunner(repositoryURL: repo)
+        let origin = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("gwbremote-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: origin) }
+        _ = try await r.output(["init", "--bare", origin.path])
+        _ = try await r.output(["remote", "add", "origin", origin.path])
+        _ = try await r.output(["push", "origin", "main"])
+        _ = try await r.output(["fetch", "origin"])
+        _ = try await r.output(["switch", "-c", "other"]) // move off main so the switch is observable
+
+        // Local "main" already exists, so checking out the remote should just switch to it (no error).
+        try await provider.checkoutRemoteBranch(RemoteBranch(remote: "origin", name: "main"))
+        let current = try await provider.loadStatus().currentBranch
+        XCTAssertEqual(current, "main")
+    }
+
     func test_stashApplyAndDrop() async throws {
         try "wip\n".write(to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
         _ = try await GitRunner(repositoryURL: repo).output(["stash", "push", "-m", "wip"])

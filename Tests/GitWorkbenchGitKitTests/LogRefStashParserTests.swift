@@ -32,6 +32,18 @@ final class LogRefStashParserTests: XCTestCase {
         XCTAssertNil(branches.first(where: { $0.name == "dev" })?.upstream)
     }
 
+    func test_remoteRefParsesBranchesStrippingRemotePrefix() {
+        let F = "\u{1f}"
+        let lines = ["origin/main\(F)main",
+                     "origin/feat/auto-sync\(F)feat/auto-sync",   // branch name keeps its own slashes
+                     "origin/HEAD\(F)HEAD",                        // the remote's HEAD pointer — dropped
+                     "upstream/main\(F)main"]
+        let branches = RemoteRefParser.parse(lines.joined(separator: "\n"))
+        XCTAssertEqual(branches.map(\.name), ["main", "feat/auto-sync", "main"])  // prefix removed, HEAD skipped
+        XCTAssertEqual(branches.map(\.id), ["origin/main", "origin/feat/auto-sync", "upstream/main"])
+        XCTAssertEqual(branches.map(\.remote), ["origin", "origin", "upstream"])
+    }
+
     func test_stashParsesEntries() {
         let F = "\u{1f}"
         let lines = ["stash@{0}\(F)WIP: tune retry delays\(F)40 minutes ago",

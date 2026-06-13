@@ -67,15 +67,17 @@ public final class GitWorkbenchStore {
 
     // MARK: Loading
 
-    /// Re-pull status, branches, history, and stashes.
+    /// Re-pull status, branches, remote branches, history, and stashes.
     public func reload() async {
         do {
             async let status = provider.loadStatus()
             async let branches = provider.loadBranches()
+            async let remoteBranches = provider.loadRemoteBranches()
             async let stashes = provider.loadStashes()
-            let (s, b, st) = try await (status, branches, stashes)
+            let (s, b, rb, st) = try await (status, branches, remoteBranches, stashes)
             state.repo = s
             state.branches = b
+            state.remoteBranches = rb
             state.stashes = st
             hasLoaded = true
         } catch {
@@ -138,11 +140,21 @@ public final class GitWorkbenchStore {
     /// Show a branch's history (single-click on a branch in the rail): switch to History, load that
     /// branch's commits, and select its tip. `historyBranch` persists across reloads.
     public func showHistory(of branch: Branch) async {
+        await showHistory(ofRef: branch.name)
+    }
+
+    /// Show a remote branch's history. The full ref (e.g. `origin/feat/x`) is a valid revision for
+    /// `git log`, and doubles as the selection key in the rail.
+    public func showHistory(of branch: RemoteBranch) async {
+        await showHistory(ofRef: branch.id)
+    }
+
+    private func showHistory(ofRef ref: String) async {
         state.activeView = .history
-        state.historyBranch = branch.name
+        state.historyBranch = ref
         state.isLoadingHistory = true
         do {
-            state.commits = try await provider.loadHistory(of: branch.name, before: nil, limit: 50)
+            state.commits = try await provider.loadHistory(of: ref, before: nil, limit: 50)
             state.isLoadingHistory = false
             if let first = state.commits.first {
                 await selectCommit(first.id)
@@ -350,6 +362,19 @@ public extension GitWorkbenchStore {
             state.historyBranch = nil // history follows the new current branch
             await reload()
             state.toast = .success("Switched to \(branch.name)")
+        } catch {
+            setError(error)
+        }
+    }
+
+    /// Check out a remote branch locally (double-click in the rail), tracking it. The new local
+    /// branch becomes HEAD, so history follows it like a plain switch.
+    func checkoutRemoteBranch(_ branch: RemoteBranch) async {
+        do {
+            try await provider.checkoutRemoteBranch(branch)
+            state.historyBranch = nil // history follows the new current branch
+            await reload()
+            state.toast = .success("Checked out \(branch.name)")
         } catch {
             setError(error)
         }

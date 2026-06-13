@@ -18,6 +18,7 @@ public actor MockGitProvider: GitWorkbenchProvider {
     private var commits: [Commit]
     private var stashes: [Stash]
     private var branches: [Branch]
+    private var remoteBranches: [RemoteBranch]
     private let delay: Duration
 
     /// `delay` is the artificial latency per call (default 700ms; pass `.zero` in tests).
@@ -26,6 +27,7 @@ public actor MockGitProvider: GitWorkbenchProvider {
         self.commits = Fixtures.commits
         self.stashes = Fixtures.stashes
         self.branches = Fixtures.branches
+        self.remoteBranches = Fixtures.remoteBranches
         self.delay = delay
     }
 
@@ -61,6 +63,11 @@ public actor MockGitProvider: GitWorkbenchProvider {
     public func loadBranches() async throws -> [Branch] {
         await pause()
         return branches
+    }
+
+    public func loadRemoteBranches() async throws -> [RemoteBranch] {
+        await pause()
+        return remoteBranches
     }
 
     public func loadDiff(_ request: DiffRequest) async throws -> FileDiff {
@@ -149,6 +156,19 @@ extension MockGitProvider {
         await pause()
         status.currentBranch = branch.name
         status.upstream = branch.upstream
+        branches = branches.map {
+            Branch(name: $0.name, isCurrent: $0.name == branch.name, upstream: $0.upstream)
+        }
+    }
+
+    public func checkoutRemoteBranch(_ branch: RemoteBranch) async throws {
+        await pause()
+        // Create a local branch tracking the remote (if it doesn't exist yet), then make it current.
+        status.currentBranch = branch.name
+        status.upstream = branch.id
+        if !branches.contains(where: { $0.name == branch.name }) {
+            branches.append(Branch(name: branch.name, upstream: branch.id))
+        }
         branches = branches.map {
             Branch(name: $0.name, isCurrent: $0.name == branch.name, upstream: $0.upstream)
         }

@@ -67,6 +67,12 @@ public struct CLIGitProvider: GitWorkbenchProvider {
         return RefParser.parse(out)
     }
 
+    public func loadRemoteBranches() async throws -> [RemoteBranch] {
+        let out = try await runner.output(["for-each-ref",
+            "--format=%(refname:short)\u{1f}%(refname:lstrip=3)", "refs/remotes"]).text
+        return RemoteRefParser.parse(out)
+    }
+
     public func loadStashes() async throws -> [Stash] {
         let out = try await runner.output(["stash", "list", "--format=%gd\u{1f}%s\u{1f}%cr"]).text
         let branch = (try? await currentBranch()) ?? ""

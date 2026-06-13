@@ -181,6 +181,7 @@ struct FailingProvider: GitWorkbenchProvider {
     func loadHistory(of _: String?, before _: Commit.ID?, limit _: Int) async throws -> [Commit] { Fixtures.commits }
     func loadStashes() async throws -> [Stash] { Fixtures.stashes }
     func loadBranches() async throws -> [Branch] { Fixtures.branches }
+    func loadRemoteBranches() async throws -> [RemoteBranch] { Fixtures.remoteBranches }
     func loadDiff(_: DiffRequest) async throws -> FileDiff { throw Boom() }
     func stage(_: [FileChange]) async throws { throw Boom() }
     func unstage(_: [FileChange]) async throws { throw Boom() }
@@ -190,6 +191,7 @@ struct FailingProvider: GitWorkbenchProvider {
     func push() async throws -> SyncResult { throw Boom() }
     func fetch() async throws -> SyncResult { throw Boom() }
     func switchBranch(to _: Branch) async throws { throw Boom() }
+    func checkoutRemoteBranch(_: RemoteBranch) async throws { throw Boom() }
     func applyStash(_: Stash) async throws { throw Boom() }
     func popStash(_: Stash) async throws { throw Boom() }
     func dropStash(_: Stash) async throws { throw Boom() }
@@ -364,5 +366,41 @@ extension StoreReducerTests {
         await store.switchBranch(to: main)
         XCTAssertEqual(store.state.repo.currentBranch, "main")
         XCTAssertEqual(store.state.toast?.message, "Switched to main")
+    }
+
+    func test_reloadLoadsRemoteBranches() async {
+        let store = makeStore()
+        await store.reload()
+        XCTAssertEqual(store.state.remoteBranches.map(\.id), Fixtures.remoteBranches.map(\.id))
+    }
+
+    func test_checkoutRemoteBranchUpdatesCurrentTracksAndToasts() async {
+        let store = makeStore()
+        await store.reload()
+        // release/1.0 exists only on the remote (no local branch yet).
+        let remote = store.state.remoteBranches.first { $0.name == "release/1.0" }!
+        XCTAssertFalse(store.state.branches.contains { $0.name == "release/1.0" })
+        await store.checkoutRemoteBranch(remote)
+        XCTAssertEqual(store.state.repo.currentBranch, "release/1.0")
+        XCTAssertEqual(store.state.repo.upstream, "origin/release/1.0")
+        XCTAssertEqual(store.state.toast?.message, "Checked out release/1.0")
+        XCTAssertTrue(store.state.branches.contains { $0.name == "release/1.0" }) // local tracking branch created
+        XCTAssertNil(store.state.historyBranch) // history follows the new current branch
+    }
+
+    func test_checkoutRemoteBranchErrorShowsToast() async {
+        let store = GitWorkbenchStore(provider: FailingProvider())
+        await store.reload()
+        await store.checkoutRemoteBranch(RemoteBranch(remote: "origin", name: "main"))
+        XCTAssertEqual(store.state.toast?.style, .error)
+    }
+
+    func test_showHistoryOfRemoteBranchUsesFullRef() async {
+        let store = makeStore()
+        await store.reload()
+        let remote = store.state.remoteBranches.first { $0.name == "main" }! // id "origin/main"
+        await store.showHistory(of: remote)
+        XCTAssertEqual(store.state.activeView, .history)
+        XCTAssertEqual(store.state.historyBranch, "origin/main")
     }
 }

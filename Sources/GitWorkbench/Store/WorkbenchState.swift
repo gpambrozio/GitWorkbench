@@ -9,6 +9,7 @@ public struct WorkbenchState: Sendable {
     // repo status
     public var repo: RepositoryStatus
     public var branches: [Branch] = []
+    public var remoteBranches: [RemoteBranch] = []
 
     // changes view
     public var selectedFileID: FileChange.ID?
