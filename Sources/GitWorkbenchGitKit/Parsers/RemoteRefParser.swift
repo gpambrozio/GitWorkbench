@@ -5,6 +5,11 @@ import GitWorkbench
 /// (one ref per line). `lstrip=3` drops `refs/remotes/<remote>/`, leaving the branch name with its
 /// remote prefix removed (and intact even when the branch name itself contains slashes). The
 /// `<remote>/HEAD` symbolic pointer is skipped.
+///
+/// Caveat: `lstrip=3` strips exactly three leading components (`refs`, `remotes`, `<remote>`), so it
+/// assumes the remote name is a single component. A remote whose own name contains a `/` (e.g.
+/// `org/fork`) would leave the remainder in the branch field and mis-split here — vanishingly rare,
+/// as remote names don't normally contain slashes.
 public enum RemoteRefParser {
     public static func parse(_ output: String) -> [RemoteBranch] {
         output.split(separator: "\n", omittingEmptySubsequences: true).compactMap { line -> RemoteBranch? in
