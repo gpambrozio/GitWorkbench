@@ -31,7 +31,7 @@ struct WorkspaceRail: View {
                 if !s.remoteBranches.isEmpty {
                     railHeader("REMOTES")
                     ForEach(remoteGroups(s.remoteBranches), id: \.remote) { group in
-                        RailItem(icon: IconLibrary.folder, title: group.remote, count: nil, selected: false)
+                        remoteHeader(group.remote)
                         ForEach(group.branches) { remote in
                             RailItem(icon: IconLibrary.branch, title: remote.name, count: nil,
                                      selected: s.activeView == .history && remote.id == s.historyBranch,
@@ -57,6 +57,25 @@ struct WorkspaceRail: View {
             .foregroundStyle(theme.ink3)
             .padding(.init(top: 14, leading: 16, bottom: 5, trailing: 16))
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A non-interactive sub-header naming a remote (e.g. "origin") above its branches. Mirrors a
+    /// `RailItem`'s look but takes no taps and shows no hover feedback — it's a label, not a control.
+    private func remoteHeader(_ name: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: IconLibrary.folder)
+                .font(.system(size: 12))
+                .foregroundStyle(theme.ink2)
+            Text(name)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(theme.ink)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+        }
+        .padding(.leading, 8).padding(.trailing, 8)
+        .frame(height: Tokens.railRowHeight)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Tokens.railInsetH)
     }
 
     /// Remote branches grouped under their remote, preserving the provider's order (alphabetical,
@@ -93,23 +112,9 @@ private struct RailItem: View {
     /// Optional double-click action. When set, a single click runs `action` and a double-click runs
     /// this — used for branch rows (click = view history, double-click = switch).
     var doubleAction: (() -> Void)? = nil
-    /// Optional tap action. When `nil` the row is a non-interactive label — no hover tint and no
-    /// taps — used for the remote-name sub-headers in the REMOTES section.
-    var action: (() -> Void)? = nil
+    let action: () -> Void
 
     var body: some View {
-        Group {
-            if let action {
-                interactive(action)
-            } else {
-                label   // non-interactive sub-header (e.g. a remote name)
-            }
-        }
-        .padding(.horizontal, Tokens.railInsetH)
-    }
-
-    /// The tappable variant: hover feedback plus single/double-click handling.
-    @ViewBuilder private func interactive(_ action: @escaping () -> Void) -> some View {
         Group {
             if let doubleAction {
                 label
@@ -120,6 +125,7 @@ private struct RailItem: View {
             }
         }
         .onHover { hover = $0 }
+        .padding(.horizontal, Tokens.railInsetH)
     }
 
     private var label: some View {
