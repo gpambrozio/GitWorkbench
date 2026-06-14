@@ -86,6 +86,24 @@ final class CLIGitProviderTests: XCTestCase {
         XCTAssertTrue(branches[0].isCurrent)
     }
 
+    func test_loadRemoteBranchesStripsPrefixAndSkipsHEAD() async throws {
+        let origin = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("gwbremote-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: origin) }
+        try await git(["init", "--bare", origin.path])
+        try await git(["remote", "add", "origin", origin.path])
+        try await git(["branch", "feature/x"])
+        try await git(["push", "origin", "main", "feature/x"])
+        try await git(["fetch", "origin"])
+        try await git(["remote", "set-head", "origin", "main"]) // creates the origin/HEAD pointer
+
+        let remotes = try await provider.loadRemoteBranches()
+        XCTAssertEqual(Set(remotes.map(\.name)), ["main", "feature/x"]) // remote prefix removed
+        XCTAssertEqual(Set(remotes.map(\.id)), ["origin/main", "origin/feature/x"])
+        XCTAssertTrue(remotes.allSatisfy { $0.remote == "origin" })
+        XCTAssertFalse(remotes.contains { $0.name == "HEAD" }) // origin/HEAD is not a branch
+    }
+
     func test_loadDiffForWorkingTreeFile() async throws {
         let file = FileChange(path: "a.txt", status: .modified, isStaged: false)
         let diff = try await provider.loadDiff(DiffRequest(file: file, context: .workingTree(staged: false), mode: .unified))

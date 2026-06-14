@@ -47,6 +47,19 @@ extension CLIGitProvider {
         _ = try await runner.output(["switch", branch.name])
     }
 
+    public func checkoutRemoteBranch(_ branch: RemoteBranch) async throws {
+        // If a local branch of this name already exists, switch to it; otherwise create a local
+        // branch tracking the remote ref (`git switch --track origin/x` makes local `x` track it).
+        // Checking first keeps the surfaced error the real one from the command we mean to run,
+        // rather than a confusing "already exists" / "invalid reference" from a blind fallback.
+        let exists = try await runner.run(["show-ref", "--verify", "--quiet", "refs/heads/\(branch.name)"])
+        if exists.exitCode == 0 {
+            _ = try await runner.output(["switch", branch.name])
+        } else {
+            _ = try await runner.output(["switch", "--track", branch.id])
+        }
+    }
+
     public func applyStash(_ stash: Stash) async throws { _ = try await runner.output(["stash", "apply", stash.ref]) }
     public func popStash(_ stash: Stash) async throws { _ = try await runner.output(["stash", "pop", stash.ref]) }
     public func dropStash(_ stash: Stash) async throws { _ = try await runner.output(["stash", "drop", stash.ref]) }

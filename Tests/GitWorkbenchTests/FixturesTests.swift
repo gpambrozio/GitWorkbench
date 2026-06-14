@@ -32,6 +32,10 @@ final class FixturesTests: XCTestCase {
         XCTAssertEqual(Fixtures.stashes.first?.ref, "stash@{0}")
         XCTAssertEqual(Fixtures.branches.map(\.name), ["main", "develop", "feat/auto-sync", "fix/log-levels"])
         XCTAssertEqual(Fixtures.branches.first(where: \.isCurrent)?.name, "feat/auto-sync")
+        XCTAssertEqual(Fixtures.remoteBranches.map(\.id),
+                       ["origin/develop", "origin/feat/auto-sync", "origin/main", "origin/release/1.0"])
+        // the current branch's upstream is among the remotes (rendered in bold by the rail)
+        XCTAssertTrue(Fixtures.remoteBranches.contains { $0.id == Fixtures.repositoryStatus.upstream })
     }
 
     func test_initialStateBuildsFromFixtures() {
@@ -40,5 +44,6 @@ final class FixturesTests: XCTestCase {
         XCTAssertEqual(s.commits.count, 6)
         XCTAssertEqual(s.stashes.count, 2)
         XCTAssertEqual(s.branches.count, 4)
+        XCTAssertEqual(s.remoteBranches.count, 4)
     }
 }

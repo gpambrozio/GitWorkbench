@@ -113,10 +113,20 @@ public enum Fixtures {
         Branch(name: "fix/log-levels", isCurrent: false, upstream: nil),
     ]
 
+    // MARK: Remote branches (alphabetical, like `git for-each-ref`). `origin/feat/auto-sync` is
+    // the current branch's upstream (rendered in bold); `origin/release/1.0` has no local branch.
+    public static let remoteBranches: [RemoteBranch] = [
+        RemoteBranch(remote: "origin", name: "develop"),
+        RemoteBranch(remote: "origin", name: "feat/auto-sync"),
+        RemoteBranch(remote: "origin", name: "main"),
+        RemoteBranch(remote: "origin", name: "release/1.0"),
+    ]
+
     /// A fully-populated initial state for previews and the (later) store/demo.
     public static var initialState: WorkbenchState {
         var s = WorkbenchState(repo: repositoryStatus)
         s.branches = branches
+        s.remoteBranches = remoteBranches
         s.commits = commits
         s.stashes = stashes
         return s

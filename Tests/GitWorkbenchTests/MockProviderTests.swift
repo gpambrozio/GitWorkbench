@@ -27,6 +27,9 @@ final class MockProviderTests: XCTestCase {
         XCTAssertEqual(stashes.map(\.ref), ["stash@{0}", "stash@{1}"])
         let branches = try await p.loadBranches()
         XCTAssertEqual(branches.first(where: \.isCurrent)?.name, "feat/auto-sync")
+        let remotes = try await p.loadRemoteBranches()
+        XCTAssertEqual(remotes.map(\.name), ["develop", "feat/auto-sync", "main", "release/1.0"])
+        XCTAssertEqual(remotes.first?.id, "origin/develop") // id keeps the remote prefix
     }
 
     func test_loadDiffWorkingTreeAndUnknown() async throws {
@@ -110,5 +113,18 @@ final class MockProviderTests: XCTestCase {
         XCTAssertEqual(status.currentBranch, "main")
         let branches = try await p.loadBranches()
         XCTAssertEqual(branches.first(where: \.isCurrent)?.name, "main")
+    }
+
+    func test_checkoutRemoteBranchTracksAndCreatesLocalBranch() async throws {
+        let p = provider()
+        // release/1.0 exists only as a remote branch (no local counterpart).
+        let release = Fixtures.remoteBranches.first { $0.name == "release/1.0" }!
+        try await p.checkoutRemoteBranch(release)
+        let status = try await p.loadStatus()
+        XCTAssertEqual(status.currentBranch, "release/1.0")
+        XCTAssertEqual(status.upstream, "origin/release/1.0")
+        let branches = try await p.loadBranches()
+        XCTAssertEqual(branches.first(where: \.isCurrent)?.name, "release/1.0")
+        XCTAssertTrue(branches.contains { $0.name == "release/1.0" }) // local tracking branch created
     }
 }

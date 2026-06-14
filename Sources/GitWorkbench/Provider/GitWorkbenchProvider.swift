@@ -14,6 +14,8 @@ public protocol GitWorkbenchDataSource: Sendable {
     func loadStashes() async throws -> [Stash]
     /// Local branches for the switcher.
     func loadBranches() async throws -> [Branch]
+    /// Remote-tracking branches for the switcher (every remote, not just the current upstream).
+    func loadRemoteBranches() async throws -> [RemoteBranch]
     /// The diff for one file in a given context (working tree, a commit, or a stash).
     func loadDiff(_ request: DiffRequest) async throws -> FileDiff
 
@@ -40,6 +42,8 @@ public protocol GitWorkbenchActionHandler: Sendable {
     func push() async throws -> SyncResult
     func fetch() async throws -> SyncResult
     func switchBranch(to branch: Branch) async throws
+    /// Check out a remote branch locally, creating a local tracking branch for it.
+    func checkoutRemoteBranch(_ branch: RemoteBranch) async throws
 
     func applyStash(_ stash: Stash) async throws
     func popStash(_ stash: Stash) async throws

@@ -18,19 +18,30 @@ struct WorkspaceRail: View {
 
                 railHeader("BRANCHES")
                 ForEach(s.branches) { branch in
+                    let isCurrent = branch.name == s.repo.currentBranch
                     RailItem(icon: IconLibrary.branch, title: branch.name, count: nil,
                              selected: s.activeView == .history && branch.name == (s.historyBranch ?? s.repo.currentBranch),
-                             current: branch.name == s.repo.currentBranch,
+                             emphasized: isCurrent, badge: isCurrent ? "HEAD" : nil,
                              doubleAction: { Task { await store.switchBranch(to: branch) } }) {
                         Task { await store.showHistory(of: branch) }
                     }
                     .help("Click to view history \u{00B7} double-click to switch")
                 }
 
-                railHeader("REMOTES")
-                RailItem(icon: IconLibrary.folder, title: "origin", count: nil, selected: false) {}
-                if let upstream = s.repo.upstream {
-                    RailItem(icon: IconLibrary.branch, title: upstream, count: nil, selected: false, indent: 26) {}
+                if !s.remoteBranches.isEmpty {
+                    railHeader("REMOTES")
+                    ForEach(remoteGroups(s.remoteBranches), id: \.remote) { group in
+                        remoteHeader(group.remote)
+                        ForEach(group.branches) { remote in
+                            RailItem(icon: IconLibrary.branch, title: remote.name, count: nil,
+                                     selected: s.activeView == .history && remote.id == s.historyBranch,
+                                     emphasized: remote.id == s.repo.upstream, indent: 26,
+                                     doubleAction: { Task { await store.checkoutRemoteBranch(remote) } }) {
+                                Task { await store.showHistory(of: remote) }
+                            }
+                            .help("Click to view history \u{00B7} double-click to check out")
+                        }
+                    }
                 }
                 Spacer(minLength: 8)
             }
@@ -47,6 +58,42 @@ struct WorkspaceRail: View {
             .padding(.init(top: 14, leading: 16, bottom: 5, trailing: 16))
             .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    /// A non-interactive sub-header naming a remote (e.g. "origin") above its branches. Mirrors a
+    /// `RailItem`'s look but takes no taps and shows no hover feedback — it's a label, not a control.
+    private func remoteHeader(_ name: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: IconLibrary.folder)
+                .font(.system(size: 12))
+                .foregroundStyle(theme.ink2)
+            Text(name)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(theme.ink)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+        }
+        .padding(.leading, 8).padding(.trailing, 8)
+        .frame(height: Tokens.railRowHeight)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Tokens.railInsetH)
+    }
+
+    /// Remote branches grouped under their remote, preserving the provider's order (alphabetical,
+    /// from `git for-each-ref`) for both remotes and the branches within each.
+    private func remoteGroups(_ branches: [RemoteBranch]) -> [RemoteGroup] {
+        var order: [String] = []
+        var byRemote: [String: [RemoteBranch]] = [:]
+        for branch in branches {
+            if byRemote[branch.remote] == nil { order.append(branch.remote) }
+            byRemote[branch.remote, default: []].append(branch)
+        }
+        return order.map { RemoteGroup(remote: $0, branches: byRemote[$0] ?? []) }
+    }
+}
+
+private struct RemoteGroup {
+    let remote: String
+    let branches: [RemoteBranch]
 }
 
 private struct RailItem: View {
@@ -56,7 +103,11 @@ private struct RailItem: View {
     let title: String
     var count: Int?
     let selected: Bool
-    var current: Bool = false
+    /// Bold + accent treatment for the active row (the current local branch, or the remote the
+    /// current branch tracks).
+    var emphasized: Bool = false
+    /// Optional trailing badge (e.g. "HEAD" on the checked-out branch).
+    var badge: String? = nil
     var indent: CGFloat = 0
     /// Optional double-click action. When set, a single click runs `action` and a double-click runs
     /// this — used for branch rows (click = view history, double-click = switch).
@@ -81,14 +132,14 @@ private struct RailItem: View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 12))
-                .foregroundStyle(selected ? .white : (current ? theme.accent : theme.ink2))
+                .foregroundStyle(selected ? .white : (emphasized ? theme.accent : theme.ink2))
             Text(title)
-                .font(.system(size: 12.5, weight: current ? .bold : .medium))
+                .font(.system(size: 12.5, weight: emphasized ? .bold : .medium))
                 .foregroundStyle(selected ? .white : theme.ink)
                 .lineLimit(1)
             Spacer(minLength: 6)
-            if current {
-                Text("HEAD")
+            if let badge {
+                Text(badge)
                     .font(.system(size: 9.5, weight: .bold))
                     .foregroundStyle(selected ? .white : theme.accentDeep)
                     .padding(.horizontal, 5).padding(.vertical, 1)

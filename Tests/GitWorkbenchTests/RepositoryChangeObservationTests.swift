@@ -30,6 +30,7 @@ private final class DrivableProvider: GitWorkbenchProvider, @unchecked Sendable 
     func loadHistory(of ref: String?, before: Commit.ID?, limit: Int) async throws -> [Commit] { [] }
     func loadStashes() async throws -> [Stash] { [] }
     func loadBranches() async throws -> [Branch] { [] }
+    func loadRemoteBranches() async throws -> [RemoteBranch] { [] }
     func loadDiff(_ request: DiffRequest) async throws -> FileDiff { throw CancellationError() }
 
     // MARK: GitWorkbenchActionHandler (unused here)
@@ -41,6 +42,7 @@ private final class DrivableProvider: GitWorkbenchProvider, @unchecked Sendable 
     func push() async throws -> SyncResult { .init(ahead: 0, behind: 0, message: "") }
     func fetch() async throws -> SyncResult { .init(ahead: 0, behind: 0, message: "") }
     func switchBranch(to branch: Branch) async throws {}
+    func checkoutRemoteBranch(_ branch: RemoteBranch) async throws {}
     func applyStash(_ stash: Stash) async throws {}
     func popStash(_ stash: Stash) async throws {}
     func dropStash(_ stash: Stash) async throws {}
