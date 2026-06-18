@@ -18,17 +18,39 @@ struct BranchTreeNode<Leaf>: Identifiable {
     }
 }
 
-/// Builds a `/`-delimited tree from a flat branch list. Within each level, leaf branches are listed
-/// before folders (matching issue #7's design, where `main` sits above the `feat/` group); the
-/// incoming order is otherwise preserved, so a provider's alphabetical sort carries through.
-func makeBranchTree<Leaf>(_ items: [Leaf], path: (Leaf) -> String) -> [BranchTreeNode<Leaf>] {
+/// Builds a `/`-delimited tree from a flat branch list. Siblings at every level are sorted
+/// case-insensitively by name, interleaving leaf branches and folders into one merged list (issue
+/// #7's follow-up). The incoming order is ignored except as a stable tie-breaker.
+///
+/// `pinnedToTop`, when it matches a top-level node's `id` (i.e. a non-nested branch like the
+/// repository's default branch), floats that node ahead of its sorted siblings at the root.
+func makeBranchTree<Leaf>(_ items: [Leaf],
+                          pinnedToTop: String? = nil,
+                          path: (Leaf) -> String) -> [BranchTreeNode<Leaf>] {
     let rows = items.map { item -> BranchRow<Leaf> in
         // `split` drops empty segments, so "a//b" and "a/" collapse cleanly; an empty name keeps a
         // single empty component rather than vanishing.
         let components = path(item).split(separator: "/").map(String.init)
         return BranchRow(components: components.isEmpty ? [path(item)] : components, leaf: item)
     }
-    return buildBranchLevel(rows, prefix: "")
+    var roots = buildBranchLevel(rows, prefix: "")
+    if let pinnedToTop, let idx = roots.firstIndex(where: { $0.id == pinnedToTop }), idx != 0 {
+        roots.insert(roots.remove(at: idx), at: 0)
+    }
+    return roots
+}
+
+/// Picks the repository's default branch from a flat list of branch names by a known-name heuristic:
+/// the first entry of `priority` that exists in `names` (case-insensitive), returned with its actual
+/// casing so callers can match it against a tree node's id. `nil` when none are present.
+func defaultBranchName(among names: [String],
+                       priority: [String] = ["main", "master", "develop"]) -> String? {
+    for candidate in priority {
+        if let match = names.first(where: { $0.caseInsensitiveCompare(candidate) == .orderedSame }) {
+            return match
+        }
+    }
+    return nil
 }
 
 private struct BranchRow<Leaf> {
@@ -55,18 +77,22 @@ private func buildBranchLevel<Leaf>(_ rows: [BranchRow<Leaf>], prefix: String) -
         }
     }
 
-    var leaves: [BranchTreeNode<Leaf>] = []
-    var folders: [BranchTreeNode<Leaf>] = []
+    var nodes: [BranchTreeNode<Leaf>] = []
     for head in order {
         let group = groups[head]!
         let id = prefix.isEmpty ? head : "\(prefix)/\(head)"
         if group.count == 1, let only = group.first, only.components.count == 1 {
-            leaves.append(BranchTreeNode(id: id, name: head, kind: .leaf(only.leaf)))
+            nodes.append(BranchTreeNode(id: id, name: head, kind: .leaf(only.leaf)))
         } else {
             let children = buildBranchLevel(group.map { BranchRow(components: Array($0.components.dropFirst()), leaf: $0.leaf) },
                                             prefix: id)
-            folders.append(BranchTreeNode(id: id, name: head, kind: .folder(children)))
+            nodes.append(BranchTreeNode(id: id, name: head, kind: .folder(children)))
         }
     }
-    return leaves + folders
+    // Sort branches and folders together, case-insensitively. `caseInsensitiveCompare` (not the
+    // localized variant) keeps ordering deterministic across locales; `sort` is stable, so equal
+    // keys hold their insertion order. Sibling names are unique per level (dictionary keys), so the
+    // only true ties are pure-case variants like "Feat"/"feat".
+    nodes.sort { $0.name.caseInsensitiveCompare($1.name) == .orderedAscending }
+    return nodes
 }

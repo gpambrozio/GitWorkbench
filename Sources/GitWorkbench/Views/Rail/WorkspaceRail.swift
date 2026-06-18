@@ -11,8 +11,10 @@ struct WorkspaceRail: View {
     var body: some View {
         let s = store.state
         // Derived once per body pass so unrelated re-evaluations (hover, selection, scroll) don't
-        // rebuild the tree; it only changes when the branch list does.
-        let localTree = makeBranchTree(s.branches) { $0.name }
+        // rebuild the tree; it only changes when the branch list does. The repository's default
+        // branch (main/master/develop) is pinned to the top of its list.
+        let localTree = makeBranchTree(s.branches,
+                                       pinnedToTop: defaultBranchName(among: s.branches.map(\.name))) { $0.name }
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 railHeader("WORKSPACE")
@@ -37,7 +39,9 @@ struct WorkspaceRail: View {
                             toggle(remoteKey)
                         }
                         if !collapsed.contains(remoteKey) {
-                            BranchTreeRows(nodes: makeBranchTree(group.branches) { $0.name },
+                            let remoteTree = makeBranchTree(group.branches,
+                                                            pinnedToTop: defaultBranchName(among: group.branches.map(\.name))) { $0.name }
+                            BranchTreeRows(nodes: remoteTree,
                                            depth: 1, keyPrefix: "\(remoteKey):", collapsed: collapsed, toggle: toggle) { remote, name, indent in
                                 remoteBranchRow(remote, displayName: name, indent: indent, state: s)
                             }
