@@ -45,6 +45,17 @@ final class BranchTreeTests: XCTestCase {
         XCTAssertTrue(isLeaf(c[0]))
     }
 
+    func test_leavesSortBeforeFoldersWithinAFolder() {
+        // The leaves-before-folders rule must also hold *inside* a folder, not just at the root.
+        let tree = makeBranchTree(["a/sub/x", "a/leaf"]) { $0 }
+        XCTAssertEqual(tree.map(\.name), ["a"])
+        let a = children(tree[0])
+        XCTAssertEqual(a.map(\.name), ["leaf", "sub"])  // leaf precedes folder despite trailing input
+        XCTAssertTrue(isLeaf(a[0]))
+        XCTAssertEqual(leafValue(a[0]), "a/leaf")
+        XCTAssertEqual(children(a[1]).map(\.id), ["a/sub/x"])
+    }
+
     func test_extraSlashesCollapse() {
         // git never emits these, but the splitter must not produce empty segments or drop the ref.
         let tree = makeBranchTree(["a//b", "trailing/"]) { $0 }

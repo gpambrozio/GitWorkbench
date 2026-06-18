@@ -47,8 +47,12 @@ private func buildBranchLevel<Leaf>(_ rows: [BranchRow<Leaf>], prefix: String) -
             assertionFailure("Branch ref produced an empty path segment — a ref cannot be both a branch and a folder prefix")
             continue
         }
-        if groups[head] == nil { order.append(head) }
-        groups[head, default: []].append(row)
+        if groups[head] == nil {
+            order.append(head)
+            groups[head] = [row]
+        } else {
+            groups[head]?.append(row)
+        }
     }
 
     var leaves: [BranchTreeNode<Leaf>] = []

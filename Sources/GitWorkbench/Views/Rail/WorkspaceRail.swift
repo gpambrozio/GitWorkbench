@@ -10,6 +10,9 @@ struct WorkspaceRail: View {
 
     var body: some View {
         let s = store.state
+        // Derived once per body pass so unrelated re-evaluations (hover, selection, scroll) don't
+        // rebuild the tree; it only changes when the branch list does.
+        let localTree = makeBranchTree(s.branches) { $0.name }
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 railHeader("WORKSPACE")
@@ -21,7 +24,7 @@ struct WorkspaceRail: View {
                          selected: s.activeView == .stashes) { store.select(.stashes) }
 
                 railHeader("BRANCHES")
-                BranchTreeRows(nodes: makeBranchTree(s.branches) { $0.name },
+                BranchTreeRows(nodes: localTree,
                                depth: 0, keyPrefix: "L:", collapsed: collapsed, toggle: toggle) { branch, name, indent in
                     localBranchRow(branch, displayName: name, indent: indent, state: s)
                 }
@@ -47,6 +50,9 @@ struct WorkspaceRail: View {
         }
         .frame(maxWidth: .infinity)   // width is set by the parent (resizable)
         .background(theme.sidebarDeep)
+        // Collapse keys aren't scoped to a repo, so drop them when the repo changes — otherwise a
+        // folder collapsed in the old repo would start collapsed in a new one sharing its name.
+        .onChange(of: s.repo.repositoryName) { collapsed = [] }
     }
 
     private func toggle(_ key: String) {
