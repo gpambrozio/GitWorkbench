@@ -3,10 +3,19 @@ import SwiftUI
 struct WorkspaceRail: View {
     var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
-    /// Collapsed folders, keyed by namespaced slash-path (e.g. "L:feat" or "R:origin:feat"). Empty
-    /// means every folder is expanded — the default, so the full tree shows until the user collapses
-    /// a node. View-only state, like `RailItem.hover`.
+    /// Collapsed folders, keyed by namespaced slash-path (e.g. "L:feat" or "R:origin:feat"). On first
+    /// load every folder collapses except the path to the current branch; after that the set is the
+    /// user's own toggles. View-only state, like `RailItem.hover`.
     @State private var collapsed: Set<String> = []
+    /// The folders present at the last reconcile, so a branch-list change can collapse only the
+    /// *newly appeared* folders without disturbing the user's existing toggles.
+    @State private var knownFolders: Set<String> = []
+    /// The repo the collapse state was initialized for; a different repo triggers a fresh default
+    /// (collapse-all-but-current-branch) rather than reconciling against unrelated folders.
+    @State private var initializedRepo: String?
+    /// The last current branch we expanded to, so a *change* of HEAD (i.e. switching branches) can
+    /// reveal the new branch by expanding its path — without re-expanding it on unrelated refreshes.
+    @State private var currentHead: String?
 
     var body: some View {
         let s = store.state
@@ -15,6 +24,11 @@ struct WorkspaceRail: View {
         // branch (main/master/develop) is pinned to the top of its list.
         let localTree = makeBranchTree(s.branches,
                                        pinnedToTop: defaultBranchName(among: s.branches.map(\.name))) { $0.name }
+        let groups = remoteGroups(s.remoteBranches)
+        // Changes exactly when the branch lists or current HEAD change — so the default collapse
+        // state is (re)computed then and on first appearance, but not on hover/selection/scroll.
+        let collapseKey = CollapseSignature(repo: s.repo.repositoryName, head: s.repo.currentBranch,
+                                            local: s.branches.map(\.id), remote: s.remoteBranches.map(\.id))
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 railHeader("WORKSPACE")
@@ -33,7 +47,7 @@ struct WorkspaceRail: View {
 
                 if !s.remoteBranches.isEmpty {
                     railHeader("REMOTES")
-                    ForEach(remoteGroups(s.remoteBranches), id: \.remote) { group in
+                    ForEach(groups, id: \.remote) { group in
                         let remoteKey = "R:\(group.remote)"
                         FolderRow(name: group.remote, depth: 0, collapsed: collapsed.contains(remoteKey)) {
                             toggle(remoteKey)
@@ -54,9 +68,44 @@ struct WorkspaceRail: View {
         }
         .frame(maxWidth: .infinity)   // width is set by the parent (resizable)
         .background(theme.sidebarDeep)
-        // Collapse keys aren't scoped to a repo, so drop them when the repo changes — otherwise a
-        // folder collapsed in the old repo would start collapsed in a new one sharing its name.
-        .onChange(of: s.repo.repositoryName) { collapsed = [] }
+        // Initialize/refresh the collapse state when the branches or HEAD change (and on first
+        // appearance). New folders default to collapsed; the user's own toggles are preserved.
+        .onChange(of: collapseKey, initial: true) {
+            applyCollapseDefaults(allFolders: allCollapsibleFolders(local: localTree, groups: groups),
+                                  currentBranch: s.repo.currentBranch, repo: s.repo.repositoryName)
+        }
+    }
+
+    /// Every collapsible folder key currently in the rail: local folders, each remote's header, and
+    /// the folders inside each remote tree — namespaced exactly as `BranchTreeRows` keys them.
+    private func allCollapsibleFolders(local: [BranchTreeNode<Branch>], groups: [RemoteGroup]) -> Set<String> {
+        var keys = Set(folderKeys(local, keyPrefix: "L:"))
+        for group in groups {
+            keys.insert("R:\(group.remote)")
+            let tree = makeBranchTree(group.branches,
+                                      pinnedToTop: defaultBranchName(among: group.branches.map(\.name))) { $0.name }
+            keys.formUnion(folderKeys(tree, keyPrefix: "R:\(group.remote):"))
+        }
+        return keys
+    }
+
+    /// First time we see a repo, collapse everything except the path to the current branch. On later
+    /// branch-list changes within the same repo, preserve the user's toggles and only collapse the
+    /// folders that newly appeared (see `reconcileCollapsed`) — but when HEAD itself changed (the
+    /// user switched branches), expand the path to the new branch so it's revealed.
+    private func applyCollapseDefaults(allFolders: Set<String>, currentBranch: String, repo: String) {
+        let headChanged = currentHead != currentBranch
+        if initializedRepo != repo {
+            initializedRepo = repo
+            collapsed = allFolders.subtracting(ancestorFolderKeys(of: currentBranch, keyPrefix: "L:"))
+        } else {
+            collapsed = reconcileCollapsed(previous: collapsed, knownFolders: knownFolders, allFolders: allFolders)
+            if headChanged {
+                collapsed.subtract(ancestorFolderKeys(of: currentBranch, keyPrefix: "L:"))
+            }
+        }
+        knownFolders = allFolders
+        currentHead = currentBranch
     }
 
     private func toggle(_ key: String) {
@@ -112,6 +161,15 @@ struct WorkspaceRail: View {
 private struct RemoteGroup {
     let remote: String
     let branches: [RemoteBranch]
+}
+
+/// Identity of the inputs that determine the default collapse state. Equatable so `onChange` fires
+/// only when the branches or current HEAD actually change — not on every body re-evaluation.
+private struct CollapseSignature: Equatable {
+    let repo: String
+    let head: String
+    let local: [String]
+    let remote: [String]
 }
 
 /// Renders one branch tree (local, or a single remote's branches) as indented, collapsible rows.

@@ -101,6 +101,49 @@ final class BranchTreeTests: XCTestCase {
         XCTAssertEqual(tree.map(\.name), ["auto", "ga"])
     }
 
+    // MARK: - Collapse keys
+
+    func test_folderKeysCollectsEveryFolderDepthFirstWithPrefix() {
+        let tree = makeBranchTree(["ga/feature/x", "ga/spike/y", "main"]) { $0 }
+        // Leaves (main, x, y) contribute no key; folders do, prefixed and namespaced by id.
+        XCTAssertEqual(folderKeys(tree, keyPrefix: "L:"),
+                       ["L:ga", "L:ga/feature", "L:ga/spike"])
+    }
+
+    func test_ancestorFolderKeysAreTheBranchsProperPrefixes() {
+        XCTAssertEqual(ancestorFolderKeys(of: "ga/feature/IOSAMN-6030/month", keyPrefix: "L:"),
+                       ["L:ga", "L:ga/feature", "L:ga/feature/IOSAMN-6030"])
+    }
+
+    func test_ancestorFolderKeysEmptyForTopLevelBranch() {
+        XCTAssertTrue(ancestorFolderKeys(of: "develop", keyPrefix: "L:").isEmpty)
+    }
+
+    func test_reconcileCollapsedDefaultsNewFoldersCollapsedAndKeepsToggles() {
+        // User had "L:feat" collapsed and "L:fix" expanded (absent from the set). A refresh adds
+        // "L:new"; the user's choices stand and only the new folder defaults to collapsed.
+        let result = reconcileCollapsed(previous: ["L:feat"],
+                                        knownFolders: ["L:feat", "L:fix"],
+                                        allFolders: ["L:feat", "L:fix", "L:new"])
+        XCTAssertEqual(result, ["L:feat", "L:new"])
+    }
+
+    func test_reconcileCollapsedDropsVanishedFolders() {
+        // "L:gone" disappeared from the tree, so its stale collapse key is pruned.
+        let result = reconcileCollapsed(previous: ["L:feat", "L:gone"],
+                                        knownFolders: ["L:feat", "L:gone"],
+                                        allFolders: ["L:feat"])
+        XCTAssertEqual(result, ["L:feat"])
+    }
+
+    func test_reconcileCollapsedPreservesAnExpandedExistingFolder() {
+        // "L:feat" is known but not collapsed (the user expanded it); it must stay expanded.
+        let result = reconcileCollapsed(previous: [],
+                                        knownFolders: ["L:feat"],
+                                        allFolders: ["L:feat"])
+        XCTAssertTrue(result.isEmpty)
+    }
+
     // MARK: - Fixtures
 
     func test_localBranchFixturesCarryTheBranchValue() {

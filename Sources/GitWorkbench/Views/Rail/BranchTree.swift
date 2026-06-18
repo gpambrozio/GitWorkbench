@@ -53,6 +53,43 @@ func defaultBranchName(among names: [String],
     return nil
 }
 
+/// The collapse key of every folder in `nodes`, depth-first, each prefixed with `keyPrefix` to match
+/// `BranchTreeRows`' keying (e.g. "L:" or "R:origin:"). Leaves have no key. Used to build the
+/// "everything collapsed" default before re-expanding the path to the current branch.
+func folderKeys<Leaf>(_ nodes: [BranchTreeNode<Leaf>], keyPrefix: String) -> [String] {
+    var keys: [String] = []
+    for node in nodes {
+        if case .folder(let children) = node.kind {
+            keys.append(keyPrefix + node.id)
+            keys.append(contentsOf: folderKeys(children, keyPrefix: keyPrefix))
+        }
+    }
+    return keys
+}
+
+/// The collapse keys of the folders that contain `branchName` — its proper slash-prefixes — so the
+/// path down to that branch can be left expanded. `prefix/sub/leaf` -> ["<kp>prefix", "<kp>prefix/sub"].
+/// A top-level branch (no slash) has no ancestor folders, so this is empty.
+func ancestorFolderKeys(of branchName: String, keyPrefix: String) -> [String] {
+    let parts = branchName.split(separator: "/").map(String.init)
+    guard parts.count > 1 else { return [] }
+    var keys: [String] = []
+    var path = ""
+    for part in parts.dropLast() {
+        path = path.isEmpty ? part : "\(path)/\(part)"
+        keys.append(keyPrefix + path)
+    }
+    return keys
+}
+
+/// Folds a new set of visible folders into the user's existing collapse state when the branch list
+/// changes. Folders that appeared since `knownFolders` default to collapsed; folders the user has
+/// already toggled keep their state; folders that vanished are dropped. So manual expand/collapse
+/// survives an external refresh, while brand-new folders still start collapsed.
+func reconcileCollapsed(previous: Set<String>, knownFolders: Set<String>, allFolders: Set<String>) -> Set<String> {
+    previous.union(allFolders.subtracting(knownFolders)).intersection(allFolders)
+}
+
 private struct BranchRow<Leaf> {
     let components: [String]
     let leaf: Leaf
