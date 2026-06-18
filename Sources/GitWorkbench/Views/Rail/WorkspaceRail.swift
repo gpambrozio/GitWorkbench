@@ -79,7 +79,11 @@ struct WorkspaceRail: View {
         // appearance). New folders default to collapsed; the user's own toggles are preserved.
         .onChange(of: collapseKey, initial: true) {
             applyCollapseDefaults(allFolders: allCollapsibleFolders(local: localTree, remotes: remoteTrees),
-                                  currentBranch: s.repo.currentBranch, repo: repoID)
+                                  currentBranch: s.repo.currentBranch,
+                                  headPath: currentBranchExpansion(currentBranch: s.repo.currentBranch,
+                                                                   upstream: s.repo.upstream,
+                                                                   remoteBranches: s.remoteBranches),
+                                  repo: repoID)
         }
     }
 
@@ -99,17 +103,17 @@ struct WorkspaceRail: View {
     /// folders that newly appeared (see `reconcileCollapsed`) — but when HEAD itself changed (the
     /// user switched branches), expand the path to the new branch so it's revealed.
     ///
-    /// Both expansions use `keyPrefix: "L:"`: HEAD is always a local branch, so only the local path
-    /// is revealed and the REMOTES section intentionally stays collapsed.
-    private func applyCollapseDefaults(allFolders: Set<String>, currentBranch: String, repo: String) {
+    /// `headPath` (from `currentBranchExpansion`) covers both the local path to HEAD and the remote
+    /// path to its tracked upstream, so the tracked remote branch is revealed alongside the local one.
+    private func applyCollapseDefaults(allFolders: Set<String>, currentBranch: String, headPath: [String], repo: String) {
         let headChanged = currentHead != currentBranch
         if initializedRepo != repo {
             initializedRepo = repo
-            collapsed = allFolders.subtracting(ancestorFolderKeys(of: currentBranch, keyPrefix: "L:"))
+            collapsed = allFolders.subtracting(headPath)
         } else {
             collapsed = reconcileCollapsed(previous: collapsed, knownFolders: knownFolders, allFolders: allFolders)
             if headChanged {
-                collapsed.subtract(ancestorFolderKeys(of: currentBranch, keyPrefix: "L:"))
+                collapsed.subtract(headPath)
             }
         }
         knownFolders = allFolders

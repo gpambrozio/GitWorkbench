@@ -144,6 +144,40 @@ final class BranchTreeTests: XCTestCase {
         XCTAssertTrue(result.isEmpty)
     }
 
+    // MARK: - Current-branch expansion (local + tracked upstream)
+
+    func test_currentBranchExpansionRevealsLocalPathAndTrackedRemote() {
+        let remotes = [RemoteBranch(remote: "origin", name: "feat/auto-sync"),
+                       RemoteBranch(remote: "origin", name: "develop")]
+        let keys = currentBranchExpansion(currentBranch: "feat/auto-sync",
+                                          upstream: "origin/feat/auto-sync",
+                                          remoteBranches: remotes)
+        XCTAssertEqual(keys, ["L:feat", "R:origin", "R:origin:feat"])
+    }
+
+    func test_currentBranchExpansionWithoutUpstreamIsLocalOnly() {
+        let keys = currentBranchExpansion(currentBranch: "feat/auto-sync",
+                                          upstream: nil,
+                                          remoteBranches: [RemoteBranch(remote: "origin", name: "feat/auto-sync")])
+        XCTAssertEqual(keys, ["L:feat"])
+    }
+
+    func test_currentBranchExpansionIgnoresUpstreamMissingFromRemotes() {
+        // Tracked upstream isn't in the remote list (e.g. deleted on the remote) -> no remote keys.
+        let keys = currentBranchExpansion(currentBranch: "feat/auto-sync",
+                                          upstream: "origin/feat/auto-sync",
+                                          remoteBranches: [RemoteBranch(remote: "origin", name: "develop")])
+        XCTAssertEqual(keys, ["L:feat"])
+    }
+
+    func test_currentBranchExpansionTopLevelUpstreamExpandsOnlyTheRemoteHeader() {
+        // `main` and `origin/main` are both top-level, so only the remote header needs expanding.
+        let keys = currentBranchExpansion(currentBranch: "main",
+                                          upstream: "origin/main",
+                                          remoteBranches: [RemoteBranch(remote: "origin", name: "main")])
+        XCTAssertEqual(keys, ["R:origin"])
+    }
+
     // MARK: - Fixtures
 
     func test_localBranchFixturesCarryTheBranchValue() {

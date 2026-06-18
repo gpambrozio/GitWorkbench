@@ -90,6 +90,20 @@ func reconcileCollapsed(previous: Set<String>, knownFolders: Set<String>, allFol
     previous.union(allFolders.subtracting(knownFolders)).intersection(allFolders)
 }
 
+/// Folder keys to expand so the current branch *and the remote branch it tracks* are both visible:
+/// the local path down to `currentBranch`, plus — when it tracks an `upstream` present in
+/// `remoteBranches` — that remote's header folder and the path down to the tracked branch. Used to
+/// reveal HEAD and its upstream on first load and when switching branches.
+func currentBranchExpansion(currentBranch: String, upstream: String?, remoteBranches: [RemoteBranch]) -> [String] {
+    var keys = ancestorFolderKeys(of: currentBranch, keyPrefix: "L:")
+    if let upstream, let tracked = remoteBranches.first(where: { $0.id == upstream }) {
+        let header = "R:\(tracked.remote)"
+        keys.append(header)
+        keys.append(contentsOf: ancestorFolderKeys(of: tracked.name, keyPrefix: "\(header):"))
+    }
+    return keys
+}
+
 private struct BranchRow<Leaf> {
     let components: [String]
     let leaf: Leaf
