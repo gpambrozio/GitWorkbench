@@ -18,6 +18,30 @@ public final class GitWorkbenchStore {
     /// pre-load placeholder rather than reporting an empty repository.
     public private(set) var hasLoaded = false
 
+    // MARK: Branch-rail collapse state
+
+    //
+    // The branch rail's expand/collapse state lives on the store — not in the `WorkspaceRail` view's
+    // `@State` — so it outlives the view being torn down and rebuilt. A host that swaps
+    // `GitWorkbenchView` out and back on the *same* store (e.g. switching tabs or sessions) keeps the
+    // user's expanded folders instead of resetting to the collapse-all-but-current-branch default,
+    // exactly as the selected file, active view, and diff already survive on the store. Only
+    // `railCollapsed` is read by the view (and so is observed); the other three are reconcile
+    // bookkeeping the view never reads, so they skip observation.
+
+    /// Collapsed folders, keyed by namespaced slash-path (e.g. "L:feat" or "R:origin:feat"). Mutated
+    /// through ``toggleRailFolder(_:)`` and ``applyRailCollapseDefaults(allFolders:currentBranch:headPath:repo:)``.
+    public private(set) var railCollapsed: Set<String> = []
+    /// Folders present at the last reconcile, so a branch-list change collapses only the *newly
+    /// appeared* folders without disturbing the user's existing toggles.
+    @ObservationIgnored private var railKnownFolders: Set<String> = []
+    /// The repo the collapse state was initialized for; a different repo triggers a fresh default
+    /// (collapse-all-but-current-branch) rather than reconciling against unrelated folders.
+    @ObservationIgnored private var railInitializedRepo: String?
+    /// The last current branch we expanded to, so a *change* of HEAD (switching branches) reveals the
+    /// new branch by expanding its path — without re-expanding it on unrelated refreshes.
+    @ObservationIgnored private var railCurrentHead: String?
+
     @ObservationIgnored private let provider: any GitWorkbenchProvider
 
     /// In-flight diff load for the current selection (awaitable in tests).
@@ -63,6 +87,38 @@ public final class GitWorkbenchStore {
 
     private func saveDiffMode(_ mode: DiffMode) {
         configuration.layoutStore?.save(Self.diffModeKey(configuration), ["mode": mode == .split ? 1 : 0])
+    }
+
+    // MARK: Branch-rail collapse
+
+    /// Toggle one branch-rail folder's collapsed state (a chevron click in the rail).
+    public func toggleRailFolder(_ key: String) {
+        if railCollapsed.contains(key) { railCollapsed.remove(key) } else { railCollapsed.insert(key) }
+    }
+
+    /// Reconcile the rail's collapse state against the current set of folders, called by the rail when
+    /// the branch list or HEAD changes (and on first appearance). The first time we see a repo, collapse
+    /// everything except `headPath` (the path to the current branch and its tracked upstream). On later
+    /// branch-list changes within the same repo, preserve the user's toggles and only collapse the
+    /// folders that newly appeared (see ``reconcileCollapsed(previous:knownFolders:allFolders:)``) — but
+    /// when HEAD itself changed (the user switched branches), expand `headPath` so the new branch shows.
+    ///
+    /// Because this state lives on the store rather than the view, returning to a session whose store is
+    /// still alive takes the reconcile path (which preserves toggles) instead of re-running the first-time
+    /// collapse-all default — so manual expansions survive a tab/session switch.
+    public func applyRailCollapseDefaults(allFolders: Set<String>, currentBranch: String, headPath: [String], repo: String) {
+        let headChanged = railCurrentHead != currentBranch
+        if railInitializedRepo != repo {
+            railInitializedRepo = repo
+            railCollapsed = allFolders.subtracting(headPath)
+        } else {
+            railCollapsed = reconcileCollapsed(previous: railCollapsed, knownFolders: railKnownFolders, allFolders: allFolders)
+            if headChanged {
+                railCollapsed.subtract(headPath)
+            }
+        }
+        railKnownFolders = allFolders
+        railCurrentHead = currentBranch
     }
 
     // MARK: Loading

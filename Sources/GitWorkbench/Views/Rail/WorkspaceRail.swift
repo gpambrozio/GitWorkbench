@@ -3,19 +3,10 @@ import SwiftUI
 struct WorkspaceRail: View {
     var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
-    /// Collapsed folders, keyed by namespaced slash-path (e.g. "L:feat" or "R:origin:feat"). On first
-    /// load every folder collapses except the path to the current branch; after that the set is the
-    /// user's own toggles. View-only state, like `RailItem.hover`.
-    @State private var collapsed: Set<String> = []
-    /// The folders present at the last reconcile, so a branch-list change can collapse only the
-    /// *newly appeared* folders without disturbing the user's existing toggles.
-    @State private var knownFolders: Set<String> = []
-    /// The repo the collapse state was initialized for; a different repo triggers a fresh default
-    /// (collapse-all-but-current-branch) rather than reconciling against unrelated folders.
-    @State private var initializedRepo: String?
-    /// The last current branch we expanded to, so a *change* of HEAD (i.e. switching branches) can
-    /// reveal the new branch by expanding its path — without re-expanding it on unrelated refreshes.
-    @State private var currentHead: String?
+    /// Collapsed folders (keyed by namespaced slash-path, e.g. "L:feat" or "R:origin:feat") and the
+    /// reconcile bookkeeping behind them live on the `store`, not in this view's `@State` — so the
+    /// user's expanded folders survive the view being torn down and rebuilt when a host swaps the
+    /// workbench out and back (a tab/session switch). See `GitWorkbenchStore.applyRailCollapseDefaults`.
 
     var body: some View {
         let s = store.state
@@ -50,7 +41,9 @@ struct WorkspaceRail: View {
 
                 railHeader("BRANCHES")
                 BranchTreeRows(nodes: localTree,
-                               depth: 0, keyPrefix: "L:", collapsed: collapsed, toggle: toggle) { branch, name, indent in
+                               depth: 0, keyPrefix: "L:", collapsed: store.railCollapsed,
+                               toggle: { store.toggleRailFolder($0) })
+                { branch, name, indent in
                     localBranchRow(branch, displayName: name, indent: indent, state: s)
                 }
 
@@ -58,12 +51,14 @@ struct WorkspaceRail: View {
                     railHeader("REMOTES")
                     ForEach(remoteTrees) { entry in
                         let remoteKey = entry.key
-                        FolderRow(name: entry.group.remote, depth: 0, collapsed: collapsed.contains(remoteKey)) {
-                            toggle(remoteKey)
+                        FolderRow(name: entry.group.remote, depth: 0, collapsed: store.railCollapsed.contains(remoteKey)) {
+                            store.toggleRailFolder(remoteKey)
                         }
-                        if !collapsed.contains(remoteKey) {
+                        if !store.railCollapsed.contains(remoteKey) {
                             BranchTreeRows(nodes: entry.tree,
-                                           depth: 1, keyPrefix: "\(remoteKey):", collapsed: collapsed, toggle: toggle) { remote, name, indent in
+                                           depth: 1, keyPrefix: "\(remoteKey):", collapsed: store.railCollapsed,
+                                           toggle: { store.toggleRailFolder($0) })
+                            { remote, name, indent in
                                 remoteBranchRow(remote, displayName: name, indent: indent, state: s)
                             }
                         }
@@ -73,17 +68,17 @@ struct WorkspaceRail: View {
             }
             .padding(.bottom, 8)
         }
-        .frame(maxWidth: .infinity)   // width is set by the parent (resizable)
+        .frame(maxWidth: .infinity) // width is set by the parent (resizable)
         .background(theme.sidebarDeep)
         // Initialize/refresh the collapse state when the branches or HEAD change (and on first
         // appearance). New folders default to collapsed; the user's own toggles are preserved.
         .onChange(of: collapseKey, initial: true) {
-            applyCollapseDefaults(allFolders: allCollapsibleFolders(local: localTree, remotes: remoteTrees),
-                                  currentBranch: s.repo.currentBranch,
-                                  headPath: currentBranchExpansion(currentBranch: s.repo.currentBranch,
-                                                                   upstream: s.repo.upstream,
-                                                                   remoteBranches: s.remoteBranches),
-                                  repo: repoID)
+            store.applyRailCollapseDefaults(allFolders: allCollapsibleFolders(local: localTree, remotes: remoteTrees),
+                                            currentBranch: s.repo.currentBranch,
+                                            headPath: currentBranchExpansion(currentBranch: s.repo.currentBranch,
+                                                                             upstream: s.repo.upstream,
+                                                                             remoteBranches: s.remoteBranches),
+                                            repo: repoID)
         }
     }
 
@@ -98,32 +93,6 @@ struct WorkspaceRail: View {
         return keys
     }
 
-    /// First time we see a repo, collapse everything except the path to the current branch. On later
-    /// branch-list changes within the same repo, preserve the user's toggles and only collapse the
-    /// folders that newly appeared (see `reconcileCollapsed`) — but when HEAD itself changed (the
-    /// user switched branches), expand the path to the new branch so it's revealed.
-    ///
-    /// `headPath` (from `currentBranchExpansion`) covers both the local path to HEAD and the remote
-    /// path to its tracked upstream, so the tracked remote branch is revealed alongside the local one.
-    private func applyCollapseDefaults(allFolders: Set<String>, currentBranch: String, headPath: [String], repo: String) {
-        let headChanged = currentHead != currentBranch
-        if initializedRepo != repo {
-            initializedRepo = repo
-            collapsed = allFolders.subtracting(headPath)
-        } else {
-            collapsed = reconcileCollapsed(previous: collapsed, knownFolders: knownFolders, allFolders: allFolders)
-            if headChanged {
-                collapsed.subtract(headPath)
-            }
-        }
-        knownFolders = allFolders
-        currentHead = currentBranch
-    }
-
-    private func toggle(_ key: String) {
-        if collapsed.contains(key) { collapsed.remove(key) } else { collapsed.insert(key) }
-    }
-
     /// A leaf row for a local branch: click views its history, double-click switches to it. The
     /// checked-out branch is emphasized and carries a "HEAD" badge.
     private func localBranchRow(_ branch: Branch, displayName: String, indent: CGFloat, state s: WorkbenchState) -> some View {
@@ -131,7 +100,8 @@ struct WorkspaceRail: View {
         return RailItem(icon: IconLibrary.branch, title: displayName, count: nil,
                         selected: s.activeView == .history && branch.name == (s.historyBranch ?? s.repo.currentBranch),
                         emphasized: isCurrent, badge: isCurrent ? "HEAD" : nil, indent: indent,
-                        doubleAction: { Task { await store.switchBranch(to: branch) } }) {
+                        doubleAction: { Task { await store.switchBranch(to: branch) } })
+        {
             Task { await store.showHistory(of: branch) }
         }
         .help("Click to view history \u{00B7} double-click to switch")
@@ -143,7 +113,8 @@ struct WorkspaceRail: View {
         RailItem(icon: IconLibrary.branch, title: displayName, count: nil,
                  selected: s.activeView == .history && remote.id == s.historyBranch,
                  emphasized: remote.id == s.repo.upstream, indent: indent,
-                 doubleAction: { Task { await store.checkoutRemoteBranch(remote) } }) {
+                 doubleAction: { Task { await store.checkoutRemoteBranch(remote) } })
+        {
             Task { await store.showHistory(of: remote) }
         }
         .help("Click to view history \u{00B7} double-click to check out")
@@ -210,9 +181,9 @@ private struct BranchTreeRows<Leaf, Content: View>: View {
     var body: some View {
         ForEach(nodes) { node in
             switch node.kind {
-            case .leaf(let value):
+            case let .leaf(value):
                 leaf(value, node.name, leafIndent(depth))
-            case .folder(let children):
+            case let .folder(children):
                 let key = keyPrefix + node.id
                 let isCollapsed = collapsed.contains(key)
                 FolderRow(name: node.name, depth: depth, collapsed: isCollapsed) { toggle(key) }
