@@ -51,7 +51,9 @@ struct WorkspaceRail: View {
                     railHeader("REMOTES")
                     ForEach(remoteTrees) { entry in
                         let remoteKey = entry.key
-                        FolderRow(name: entry.group.remote, depth: 0, collapsed: store.railCollapsed.contains(remoteKey)) {
+                        FolderRow(name: entry.group.remote, depth: 0, collapsed: store.railCollapsed.contains(remoteKey),
+                                  folderKey: remoteKey)
+                        {
                             store.toggleRailFolder(remoteKey)
                         }
                         if !store.railCollapsed.contains(remoteKey) {
@@ -186,7 +188,7 @@ private struct BranchTreeRows<Leaf, Content: View>: View {
             case let .folder(children):
                 let key = keyPrefix + node.id
                 let isCollapsed = collapsed.contains(key)
-                FolderRow(name: node.name, depth: depth, collapsed: isCollapsed) { toggle(key) }
+                FolderRow(name: node.name, depth: depth, collapsed: isCollapsed, folderKey: key) { toggle(key) }
                 if !isCollapsed {
                     BranchTreeRows(nodes: children, depth: depth + 1, keyPrefix: keyPrefix,
                                    collapsed: collapsed, toggle: toggle, leaf: leaf)
@@ -211,6 +213,9 @@ private struct FolderRow: View {
     let name: String
     let depth: Int
     let collapsed: Bool
+    /// Namespaced collapse key (e.g. "L:fix" or "R:origin"). Doubles as the row's accessibility
+    /// identifier ("branch-folder-<key>") so a host's UI tests can target one specific folder.
+    let folderKey: String
     let toggle: () -> Void
 
     var body: some View {
@@ -219,6 +224,7 @@ private struct FolderRow: View {
             .onHover { hover = $0 }
             .padding(.horizontal, Tokens.railInsetH)
             .help(collapsed ? "Click to expand" : "Click to collapse")
+            .accessibilityIdentifier("branch-folder-\(folderKey)")
     }
 
     private var label: some View {
