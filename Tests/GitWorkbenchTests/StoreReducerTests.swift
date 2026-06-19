@@ -65,6 +65,59 @@ final class StoreReducerTests: XCTestCase {
         XCTAssertEqual(restoredStore.state.diffMode, .unified) // diff mode survives too
     }
 
+    // MARK: - Branch-rail collapse state
+
+    func test_railCollapseDefaultsCollapseAllButCurrentBranchOnFirstApply() {
+        let store = makeStore()
+        // First time we see a repo: every folder collapses except the path to HEAD ("L:feat").
+        store.applyRailCollapseDefaults(allFolders: ["L:feat", "L:fix", "L:ga"],
+                                        currentBranch: "feat/x", headPath: ["L:feat"], repo: "repoA")
+        XCTAssertEqual(store.railCollapsed, ["L:fix", "L:ga"])
+    }
+
+    func test_railCollapseStateSurvivesReapplyOnSameStore() {
+        let store = makeStore()
+        let folders: Set<String> = ["L:feat", "L:fix", "L:ga"]
+        store.applyRailCollapseDefaults(allFolders: folders, currentBranch: "feat/x",
+                                        headPath: ["L:feat"], repo: "repoA")
+        // The user expands "L:fix".
+        store.toggleRailFolder("L:fix")
+        XCTAssertEqual(store.railCollapsed, ["L:ga"])
+
+        // The rail view is torn down and rebuilt on the same store (a tab/session switch), so
+        // `onChange(initial:)` re-applies with the same repo/folders/HEAD. Because the state lives on
+        // the store, the reconcile path runs (not the first-time collapse-all) and the expansion holds.
+        store.applyRailCollapseDefaults(allFolders: folders, currentBranch: "feat/x",
+                                        headPath: ["L:feat"], repo: "repoA")
+        XCTAssertEqual(store.railCollapsed, ["L:ga"]) // "L:fix" stays expanded
+    }
+
+    func test_railCollapseResetsToDefaultForADifferentRepo() {
+        let store = makeStore()
+        store.applyRailCollapseDefaults(allFolders: ["L:feat", "L:fix"], currentBranch: "feat/x",
+                                        headPath: ["L:feat"], repo: "repoA")
+        store.toggleRailFolder("L:fix") // expand fix → railCollapsed empty
+
+        // A different repo is not reconciled against repoA's folders: it re-runs the collapse-all
+        // default (headPath empty here → every folder collapses).
+        store.applyRailCollapseDefaults(allFolders: ["L:topic", "L:main"], currentBranch: "topic",
+                                        headPath: [], repo: "repoB")
+        XCTAssertEqual(store.railCollapsed, ["L:topic", "L:main"])
+    }
+
+    func test_railCollapseExpandsNewBranchPathOnHeadChange() {
+        let store = makeStore()
+        let folders: Set<String> = ["L:feat", "L:fix"]
+        store.applyRailCollapseDefaults(allFolders: folders, currentBranch: "feat/x",
+                                        headPath: ["L:feat"], repo: "repoA")
+        XCTAssertEqual(store.railCollapsed, ["L:fix"]) // feat expanded, fix collapsed
+
+        // Switching branches (HEAD changes) within the same repo expands the new branch's path.
+        store.applyRailCollapseDefaults(allFolders: folders, currentBranch: "fix/y",
+                                        headPath: ["L:fix"], repo: "repoA")
+        XCTAssertFalse(store.railCollapsed.contains("L:fix")) // new HEAD path revealed
+    }
+
     func test_reloadPopulatesState() async {
         let store = makeStore()
         await store.reload()

@@ -41,6 +41,11 @@ public enum Tokens {
 
     // misc
     public static let railInsetH: CGFloat = 8
+    /// Horizontal step added per branch-tree depth level (issue #7).
+    public static let railIndentStep: CGFloat = 14
+    /// Width reserved for a folder row's disclosure chevron; leaf rows pad by this so their icons
+    /// line up under the folder icons at the same depth.
+    public static let railChevronWidth: CGFloat = 12
     public static let listRowInsetH: CGFloat = 12
     public static let toastBottomInset: CGFloat = 26
 }
