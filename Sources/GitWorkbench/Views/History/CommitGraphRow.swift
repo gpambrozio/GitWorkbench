@@ -52,14 +52,10 @@ struct CommitGraphRow: View {
     @ViewBuilder
     private var contextMenu: some View {
         let sha = commit.shortSHA
-        // These act on the checked-out branch, not the one whose log is shown — disable them when
-        // History is browsing a different branch so they can't silently change the wrong branch.
-        let actsOnCheckedOut = store.state.isBrowsingOtherBranch
         Button("Copy Commit Hash to Clipboard") { copy(commit.id, label: "commit hash") }
         Button("Copy Commit Message to Clipboard") { copy(fullMessage, label: "commit message") }
         Divider()
         Button("Check Out \u{201C}\(sha)\u{201D}") { Task { await store.checkout(commit) } }
-            .disabled(actsOnCheckedOut)
         Menu("Reset HEAD to \u{201C}\(sha)\u{201D}") {
             ForEach(ResetMode.allCases, id: \.self) { mode in
                 Button(mode.menuLabel) {
@@ -71,12 +67,14 @@ struct CommitGraphRow: View {
                 }
             }
         }
-        .disabled(actsOnCheckedOut)
+        // Reset moves the *checked-out* branch's HEAD; disable it while History shows a different
+        // branch so a commit picked from that log can't silently move/lose work on the checked-out
+        // branch. Check Out / Revert / Cherry-Pick act on the real commit SHA non-destructively, so
+        // they stay enabled regardless of which branch is being browsed.
+        .disabled(store.state.isBrowsingOtherBranch)
         Divider()
         Button("Revert \u{201C}\(sha)\u{201D}") { Task { await store.revert(commit) } }
-            .disabled(actsOnCheckedOut)
         Button("Cherry-Pick \u{201C}\(sha)\u{201D}") { Task { await store.cherryPick(commit) } }
-            .disabled(actsOnCheckedOut)
         Divider()
         Button("Create New Branch from \u{201C}\(sha)\u{201D}\u{2026}") { store.requestCreateBranch(at: commit) }
         Button("Create New Tag from \u{201C}\(sha)\u{201D}\u{2026}") { store.requestCreateTag(at: commit) }

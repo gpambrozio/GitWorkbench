@@ -48,10 +48,10 @@ public struct WorkbenchState: Sendable {
         !staged.isEmpty &&
         !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-    /// True when History is browsing a branch other than the checked-out one. The commit
-    /// actions that move or modify HEAD (checkout / reset / revert / cherry-pick) act on the
-    /// *checked-out* branch, not the one whose log is shown — so the UI disables them here to
-    /// avoid silently changing a different branch than the user is looking at.
+    /// True when History is browsing a branch other than the checked-out one. "Reset HEAD" moves
+    /// the *checked-out* branch, not the one whose log is shown, so the UI disables it here to avoid
+    /// silently moving/losing work on a different branch than the user is looking at. (Check Out /
+    /// Revert / Cherry-Pick act non-destructively on the picked commit SHA and stay enabled.)
     public var isBrowsingOtherBranch: Bool {
         guard let historyBranch else { return false }
         return historyBranch != repo.currentBranch
