@@ -67,6 +67,18 @@ public protocol GitWorkbenchActionHandler: Sendable {
 /// The `git reset` mode picked from the "Reset HEAD to…" submenu.
 public enum ResetMode: String, Sendable, CaseIterable {
     case soft, mixed, hard
+
+    /// Label shown in the "Reset HEAD to…" submenu, describing what each mode keeps or discards.
+    public var menuLabel: String {
+        switch self {
+        case .soft:  "Soft \u{2014} keep all changes staged"
+        case .mixed: "Mixed \u{2014} keep changes, unstaged"
+        case .hard:  "Hard \u{2014} discard all changes"
+        }
+    }
+
+    /// True for the irreversible mode (`--hard` throws away uncommitted work); the UI confirms it first.
+    public var isDestructive: Bool { self == .hard }
 }
 
 /// Identifies which diff to load.

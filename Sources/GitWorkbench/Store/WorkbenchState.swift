@@ -21,6 +21,7 @@ public struct WorkbenchState: Sendable {
     public var selectedCommitID: Commit.ID?
     public var selectedCommitFileID: FileChange.ID?
     public var pendingRefCreation: PendingRefCreation?   // non-nil → name-input popover up
+    public var pendingHardReset: Commit?                 // non-nil → confirm hard-reset popover up
     /// Branch whose history is shown (nil = current HEAD). Set by clicking a branch in the rail.
     public var historyBranch: String?
     /// True while a branch's history is being fetched (shows a spinner in the History list).
@@ -46,6 +47,14 @@ public struct WorkbenchState: Sendable {
     public var canCommit: Bool {
         !staged.isEmpty &&
         !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    /// True when History is browsing a branch other than the checked-out one. The commit
+    /// actions that move or modify HEAD (checkout / reset / revert / cherry-pick) act on the
+    /// *checked-out* branch, not the one whose log is shown — so the UI disables them here to
+    /// avoid silently changing a different branch than the user is looking at.
+    public var isBrowsingOtherBranch: Bool {
+        guard let historyBranch else { return false }
+        return historyBranch != repo.currentBranch
     }
 }
 

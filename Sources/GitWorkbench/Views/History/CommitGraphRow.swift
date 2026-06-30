@@ -52,18 +52,31 @@ struct CommitGraphRow: View {
     @ViewBuilder
     private var contextMenu: some View {
         let sha = commit.shortSHA
+        // These act on the checked-out branch, not the one whose log is shown — disable them when
+        // History is browsing a different branch so they can't silently change the wrong branch.
+        let actsOnCheckedOut = store.state.isBrowsingOtherBranch
         Button("Copy Commit Hash to Clipboard") { copy(commit.id, label: "commit hash") }
         Button("Copy Commit Message to Clipboard") { copy(fullMessage, label: "commit message") }
         Divider()
         Button("Check Out \u{201C}\(sha)\u{201D}") { Task { await store.checkout(commit) } }
+            .disabled(actsOnCheckedOut)
         Menu("Reset HEAD to \u{201C}\(sha)\u{201D}") {
-            Button("Soft \u{2014} keep all changes staged") { Task { await store.resetHEAD(to: commit, mode: .soft) } }
-            Button("Mixed \u{2014} keep changes, unstaged") { Task { await store.resetHEAD(to: commit, mode: .mixed) } }
-            Button("Hard \u{2014} discard all changes") { Task { await store.resetHEAD(to: commit, mode: .hard) } }
+            ForEach(ResetMode.allCases, id: \.self) { mode in
+                Button(mode.menuLabel) {
+                    if mode.isDestructive {
+                        store.requestHardReset(at: commit)   // confirm before discarding
+                    } else {
+                        Task { await store.resetHEAD(to: commit, mode: mode) }
+                    }
+                }
+            }
         }
+        .disabled(actsOnCheckedOut)
         Divider()
         Button("Revert \u{201C}\(sha)\u{201D}") { Task { await store.revert(commit) } }
+            .disabled(actsOnCheckedOut)
         Button("Cherry-Pick \u{201C}\(sha)\u{201D}") { Task { await store.cherryPick(commit) } }
+            .disabled(actsOnCheckedOut)
         Divider()
         Button("Create New Branch from \u{201C}\(sha)\u{201D}\u{2026}") { store.requestCreateBranch(at: commit) }
         Button("Create New Tag from \u{201C}\(sha)\u{201D}\u{2026}") { store.requestCreateTag(at: commit) }

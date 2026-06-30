@@ -82,12 +82,15 @@ extension CLIGitProvider {
     }
 
     public func createBranch(named name: String, at commit: Commit) async throws {
-        // `git branch <name> <sha>` creates the ref without switching to it.
-        _ = try await runner.output(["branch", name, commit.id])
+        // `git branch <name> <sha>` creates the ref without switching to it. The `--`
+        // terminator (as in `stage`/`unstage`) stops a leading-dash name being parsed as an
+        // option — e.g. a bare `-m` would otherwise rename the checked-out branch to the SHA.
+        _ = try await runner.output(["branch", "--", name, commit.id])
     }
 
     public func createTag(named name: String, at commit: Commit) async throws {
-        _ = try await runner.output(["tag", name, commit.id])
+        // `--` so a leading-dash name (e.g. `-d`) is taken as the tag name, not a git option.
+        _ = try await runner.output(["tag", "--", name, commit.id])
     }
 
     private func uniquePaths(_ files: [FileChange]) -> [String] {

@@ -577,6 +577,19 @@ public extension GitWorkbenchStore {
         }
     }
 
+    // MARK: Hard-reset confirm flow (mirrors the discard confirm popover)
+
+    /// The destructive "Hard \u{2014} discard all changes" menu item routes here so the irreversible
+    /// reset is confirmed before it throws away uncommitted work. Soft/mixed resets skip this.
+    func requestHardReset(at commit: Commit) { state.pendingHardReset = commit }
+    func cancelHardReset() { state.pendingHardReset = nil }
+
+    func confirmHardReset() async {
+        guard let commit = state.pendingHardReset else { return }
+        state.pendingHardReset = nil
+        await resetHEAD(to: commit, mode: .hard)
+    }
+
     // MARK: New-branch / new-tag input flow (mirrors the discard confirm popover)
 
     func requestCreateBranch(at commit: Commit) { state.pendingRefCreation = .init(kind: .branch, commit: commit) }
