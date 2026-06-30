@@ -248,6 +248,12 @@ struct FailingProvider: GitWorkbenchProvider {
     func applyStash(_: Stash) async throws { throw Boom() }
     func popStash(_: Stash) async throws { throw Boom() }
     func dropStash(_: Stash) async throws { throw Boom() }
+    func checkout(_: Commit) async throws { throw Boom() }
+    func resetHEAD(to _: Commit, mode _: ResetMode) async throws { throw Boom() }
+    func revert(_: Commit) async throws { throw Boom() }
+    func cherryPick(_: Commit) async throws { throw Boom() }
+    func createBranch(named _: String, at _: Commit) async throws { throw Boom() }
+    func createTag(named _: String, at _: Commit) async throws { throw Boom() }
 }
 
 extension StoreReducerTests {
@@ -455,5 +461,86 @@ extension StoreReducerTests {
         await store.showHistory(of: remote)
         XCTAssertEqual(store.state.activeView, .history)
         XCTAssertEqual(store.state.historyBranch, "origin/main")
+    }
+}
+
+// MARK: - Commit context-menu intents
+
+extension StoreReducerTests {
+    func test_checkoutCommitToasts() async {
+        let store = makeStore()
+        await store.reload()
+        let commit = store.state.commits.first!
+        await store.checkout(commit)
+        XCTAssertEqual(store.state.toast?.style, .success)
+        XCTAssertTrue(store.state.toast!.message.contains("Checked out"))
+    }
+
+    func test_resetHEADToastsWithMode() async {
+        let store = makeStore()
+        await store.reload()
+        await store.resetHEAD(to: store.state.commits.first!, mode: .hard)
+        XCTAssertEqual(store.state.toast?.style, .success)
+        XCTAssertTrue(store.state.toast!.message.contains("hard"))
+    }
+
+    func test_revertAndCherryPickToast() async {
+        let store = makeStore()
+        await store.reload()
+        let before = store.state.commits.count
+        await store.revert(store.state.commits.first!)
+        XCTAssertTrue(store.state.toast!.message.contains("Reverted"))
+        XCTAssertEqual(store.state.commits.count, before + 1) // mock surfaces the revert commit
+
+        await store.cherryPick(store.state.commits.last!)
+        XCTAssertTrue(store.state.toast!.message.contains("Cherry-picked"))
+    }
+
+    func test_commitActionErrorShowsToast() async {
+        let store = GitWorkbenchStore(provider: FailingProvider())
+        await store.reload()
+        await store.checkout(store.state.commits.first!)
+        XCTAssertEqual(store.state.toast?.style, .error)
+    }
+
+    func test_createBranchFlowAddsBranchAndToasts() async {
+        let store = makeStore()
+        await store.reload()
+        let commit = store.state.commits.first!
+        store.requestCreateBranch(at: commit)
+        XCTAssertEqual(store.state.pendingRefCreation?.kind, .branch)
+        store.setPendingRefName("topic")
+        await store.confirmRefCreation()
+        XCTAssertNil(store.state.pendingRefCreation)              // popover dismissed
+        XCTAssertTrue(store.state.branches.contains { $0.name == "topic" })
+        XCTAssertEqual(store.state.toast?.message, "Created branch topic")
+    }
+
+    func test_createTagFlowToasts() async {
+        let store = makeStore()
+        await store.reload()
+        store.requestCreateTag(at: store.state.commits.first!)
+        store.setPendingRefName("v1.0")
+        await store.confirmRefCreation()
+        XCTAssertEqual(store.state.toast?.message, "Created tag v1.0")
+    }
+
+    func test_confirmRefCreationNoOpWhenNameBlank() async {
+        let store = makeStore()
+        await store.reload()
+        let branchesBefore = store.state.branches.count
+        store.requestCreateBranch(at: store.state.commits.first!)
+        store.setPendingRefName("   ")
+        await store.confirmRefCreation()
+        XCTAssertNotNil(store.state.pendingRefCreation)          // stays up for a real name
+        XCTAssertEqual(store.state.branches.count, branchesBefore)
+    }
+
+    func test_cancelRefCreationDismisses() async {
+        let store = makeStore()
+        await store.reload()
+        store.requestCreateBranch(at: store.state.commits.first!)
+        store.cancelRefCreation()
+        XCTAssertNil(store.state.pendingRefCreation)
     }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// A commit list row: graph column (line + node) + summary/refs + author/relative/sha.
 struct CommitGraphRow: View {
@@ -45,5 +46,48 @@ struct CommitGraphRow: View {
         .contentShape(Rectangle())
         .onTapGesture { Task { await store.selectCommit(commit.id) } }
         .onHover { hover = $0 }
+        .contextMenu { contextMenu }
+    }
+
+    @ViewBuilder
+    private var contextMenu: some View {
+        let sha = commit.shortSHA
+        Button("Copy Commit Hash to Clipboard") { copy(commit.id, label: "commit hash") }
+        Button("Copy Commit Message to Clipboard") { copy(fullMessage, label: "commit message") }
+        Divider()
+        Button("Check Out \u{201C}\(sha)\u{201D}") { Task { await store.checkout(commit) } }
+        Menu("Reset HEAD to \u{201C}\(sha)\u{201D}") {
+            ForEach(ResetMode.allCases, id: \.self) { mode in
+                Button(mode.menuLabel) {
+                    if mode.isDestructive {
+                        store.requestHardReset(at: commit)   // confirm before discarding
+                    } else {
+                        Task { await store.resetHEAD(to: commit, mode: mode) }
+                    }
+                }
+            }
+        }
+        // Reset moves the *checked-out* branch's HEAD; disable it while History shows a different
+        // branch so a commit picked from that log can't silently move/lose work on the checked-out
+        // branch. Check Out / Revert / Cherry-Pick act on the real commit SHA non-destructively, so
+        // they stay enabled regardless of which branch is being browsed.
+        .disabled(store.state.isBrowsingOtherBranch)
+        Divider()
+        Button("Revert \u{201C}\(sha)\u{201D}") { Task { await store.revert(commit) } }
+        Button("Cherry-Pick \u{201C}\(sha)\u{201D}") { Task { await store.cherryPick(commit) } }
+        Divider()
+        Button("Create New Branch from \u{201C}\(sha)\u{201D}\u{2026}") { store.requestCreateBranch(at: commit) }
+        Button("Create New Tag from \u{201C}\(sha)\u{201D}\u{2026}") { store.requestCreateTag(at: commit) }
+    }
+
+    /// The full commit message: summary plus body, matching what `git log` shows.
+    private var fullMessage: String {
+        commit.body.isEmpty ? commit.summary : "\(commit.summary)\n\n\(commit.body)"
+    }
+
+    private func copy(_ text: String, label: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        store.showToast("Copied \(label) to clipboard")
     }
 }

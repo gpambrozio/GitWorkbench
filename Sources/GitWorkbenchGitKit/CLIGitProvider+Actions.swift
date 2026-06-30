@@ -64,6 +64,35 @@ extension CLIGitProvider {
     public func popStash(_ stash: Stash) async throws { _ = try await runner.output(["stash", "pop", stash.ref]) }
     public func dropStash(_ stash: Stash) async throws { _ = try await runner.output(["stash", "drop", stash.ref]) }
 
+    public func checkout(_ commit: Commit) async throws {
+        _ = try await runner.output(["checkout", commit.id])
+    }
+
+    public func resetHEAD(to commit: Commit, mode: ResetMode) async throws {
+        _ = try await runner.output(["reset", "--\(mode.rawValue)", commit.id])
+    }
+
+    public func revert(_ commit: Commit) async throws {
+        // `--no-edit` so the revert doesn't open `$EDITOR` and hang the headless process.
+        _ = try await runner.output(["revert", "--no-edit", commit.id])
+    }
+
+    public func cherryPick(_ commit: Commit) async throws {
+        _ = try await runner.output(["cherry-pick", commit.id])
+    }
+
+    public func createBranch(named name: String, at commit: Commit) async throws {
+        // `git branch <name> <sha>` creates the ref without switching to it. The `--`
+        // terminator (as in `stage`/`unstage`) stops a leading-dash name being parsed as an
+        // option — e.g. a bare `-m` would otherwise rename the checked-out branch to the SHA.
+        _ = try await runner.output(["branch", "--", name, commit.id])
+    }
+
+    public func createTag(named name: String, at commit: Commit) async throws {
+        // `--` so a leading-dash name (e.g. `-d`) is taken as the tag name, not a git option.
+        _ = try await runner.output(["tag", "--", name, commit.id])
+    }
+
     private func uniquePaths(_ files: [FileChange]) -> [String] {
         var seen = Set<String>(), result: [String] = []
         for f in files where seen.insert(f.path).inserted { result.append(f.path) }

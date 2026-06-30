@@ -48,6 +48,37 @@ public protocol GitWorkbenchActionHandler: Sendable {
     func applyStash(_ stash: Stash) async throws
     func popStash(_ stash: Stash) async throws
     func dropStash(_ stash: Stash) async throws
+
+    // History context-menu actions (right-click a commit).
+    /// Check out a commit, detaching HEAD at it.
+    func checkout(_ commit: Commit) async throws
+    /// Move the current branch's HEAD to `commit` (`git reset --soft|--mixed|--hard`).
+    func resetHEAD(to commit: Commit, mode: ResetMode) async throws
+    /// Create a new commit that undoes `commit` (`git revert`).
+    func revert(_ commit: Commit) async throws
+    /// Apply `commit` on top of the current branch (`git cherry-pick`).
+    func cherryPick(_ commit: Commit) async throws
+    /// Create a new branch pointing at `commit` (without switching to it).
+    func createBranch(named name: String, at commit: Commit) async throws
+    /// Create a new lightweight tag pointing at `commit`.
+    func createTag(named name: String, at commit: Commit) async throws
+}
+
+/// The `git reset` mode picked from the "Reset HEAD to…" submenu.
+public enum ResetMode: String, Sendable, CaseIterable {
+    case soft, mixed, hard
+
+    /// Label shown in the "Reset HEAD to…" submenu, describing what each mode keeps or discards.
+    public var menuLabel: String {
+        switch self {
+        case .soft:  "Soft \u{2014} keep all changes staged"
+        case .mixed: "Mixed \u{2014} keep changes, unstaged"
+        case .hard:  "Hard \u{2014} discard all changes"
+        }
+    }
+
+    /// True for the irreversible mode (`--hard` throws away uncommitted work); the UI confirms it first.
+    public var isDestructive: Bool { self == .hard }
 }
 
 /// Identifies which diff to load.

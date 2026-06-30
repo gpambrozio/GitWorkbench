@@ -152,4 +152,92 @@ final class CLIGitProviderActionTests: XCTestCase {
         let count = try await provider.loadStashes().count
         XCTAssertEqual(count, 0)                                 // and the stash is gone
     }
+
+    // MARK: - Commit context-menu actions
+
+    /// A bare `Commit` carrying only the SHA — the action methods read `commit.id` and nothing else.
+    private func stubCommit(_ sha: String) -> Commit {
+        Commit(id: sha, shortSHA: String(sha.prefix(7)), summary: "", authorName: "",
+               authorEmail: "", authorInitials: "", date: "", relativeDate: "")
+    }
+
+    /// Commits a new file and returns the resulting SHA.
+    private func commitFile(_ name: String, _ contents: String, message: String) async throws -> String {
+        let r = GitRunner(repositoryURL: repo)
+        try contents.write(to: repo.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        _ = try await r.output(["add", name])
+        _ = try await r.output(["commit", "-m", message])
+        return try await r.output(["rev-parse", "HEAD"]).text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func test_checkoutDetachesHeadAtCommit() async throws {
+        let first = try await GitRunner(repositoryURL: repo)
+            .output(["rev-parse", "HEAD"]).text.trimmingCharacters(in: .whitespacesAndNewlines)
+        _ = try await commitFile("b.txt", "b\n", message: "second")
+
+        try await provider.checkout(stubCommit(first))
+        let head = try await GitRunner(repositoryURL: repo)
+            .output(["rev-parse", "HEAD"]).text.trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(head, first)   // HEAD now at the first commit
+    }
+
+    func test_resetHEADHardMovesHeadAndDiscardsChanges() async throws {
+        let first = try await GitRunner(repositoryURL: repo)
+            .output(["rev-parse", "HEAD"]).text.trimmingCharacters(in: .whitespacesAndNewlines)
+        _ = try await commitFile("b.txt", "b\n", message: "second")
+
+        try await provider.resetHEAD(to: stubCommit(first), mode: .hard)
+        let head = try await GitRunner(repositoryURL: repo)
+            .output(["rev-parse", "HEAD"]).text.trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(head, first)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repo.appendingPathComponent("b.txt").path))
+    }
+
+    func test_resetHEADSoftKeepsChangesStaged() async throws {
+        let first = try await GitRunner(repositoryURL: repo)
+            .output(["rev-parse", "HEAD"]).text.trimmingCharacters(in: .whitespacesAndNewlines)
+        _ = try await commitFile("b.txt", "b\n", message: "second")
+
+        try await provider.resetHEAD(to: stubCommit(first), mode: .soft)
+        let files = try await provider.loadStatus().files
+        XCTAssertTrue(files.contains { $0.path == "b.txt" && $0.isStaged })   // change preserved, staged
+    }
+
+    func test_revertCreatesInverseCommit() async throws {
+        let sha = try await commitFile("b.txt", "b\n", message: "add b")
+        try await provider.revert(stubCommit(sha))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repo.appendingPathComponent("b.txt").path))
+        let history = try await provider.loadHistory(of: nil, before: nil, limit: 10)
+        XCTAssertEqual(history.count, 3)                          // init, add b, revert
+        XCTAssertTrue(history.first?.summary.hasPrefix("Revert") ?? false)
+    }
+
+    func test_cherryPickAppliesCommitOntoCurrentBranch() async throws {
+        let r = GitRunner(repositoryURL: repo)
+        _ = try await r.output(["switch", "-c", "feature"])
+        let sha = try await commitFile("feature.txt", "feat\n", message: "add feature file")
+        _ = try await r.output(["switch", "main"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repo.appendingPathComponent("feature.txt").path))
+
+        try await provider.cherryPick(stubCommit(sha))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repo.appendingPathComponent("feature.txt").path))
+    }
+
+    func test_createBranchAtCommitWithoutSwitching() async throws {
+        let head = try await GitRunner(repositoryURL: repo)
+            .output(["rev-parse", "HEAD"]).text.trimmingCharacters(in: .whitespacesAndNewlines)
+        try await provider.createBranch(named: "topic", at: stubCommit(head))
+        let branches = try await provider.loadBranches()
+        XCTAssertTrue(branches.contains { $0.name == "topic" })
+        let current = try await provider.loadStatus().currentBranch
+        XCTAssertEqual(current, "main")   // did not switch
+    }
+
+    func test_createTagAtCommit() async throws {
+        let head = try await GitRunner(repositoryURL: repo)
+            .output(["rev-parse", "HEAD"]).text.trimmingCharacters(in: .whitespacesAndNewlines)
+        try await provider.createTag(named: "v1.0", at: stubCommit(head))
+        let tags = try await GitRunner(repositoryURL: repo).output(["tag", "--list"]).text
+        XCTAssertTrue(tags.contains("v1.0"))
+    }
 }

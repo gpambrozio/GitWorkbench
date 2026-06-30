@@ -52,5 +52,9 @@ struct HistoryBody: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(theme.winBg)
         }
+        .overlay {
+            if let pending = store.state.pendingRefCreation { NewRefPopover(store: store, pending: pending) }
+            if let commit = store.state.pendingHardReset { ConfirmResetPopover(store: store, commit: commit) }
+        }
     }
 }

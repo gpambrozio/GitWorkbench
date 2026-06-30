@@ -106,14 +106,7 @@ extension MockGitProvider {
         let lines = message.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         let summary = lines.first ?? ""
         let body = lines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        let new = Commit(
-            id: "mock\(commits.count)", shortSHA: "mock\(commits.count)",
-            summary: summary, body: body,
-            authorName: status.author.name, authorEmail: "you@example.com",
-            authorInitials: status.author.initials, date: "Just now", relativeDate: "moments ago",
-            refs: [.head], parents: commits.first.map { [$0.shortSHA] } ?? [],
-            files: staged
-        )
+        let new = makeCommit(summary: summary, body: body, files: staged)
         commits.insert(new, at: 0)
         return new
     }
@@ -124,14 +117,8 @@ extension MockGitProvider {
         // Simulate the fetched commits arriving at the tip of the current branch so the
         // History view has something new to show after a pull.
         for _ in 0..<pulled {
-            let new = Commit(
-                id: "pulled\(commits.count)", shortSHA: "pulled\(commits.count)",
-                summary: "Pulled from origin", body: "",
-                authorName: "Origin", authorEmail: "origin@example.com",
-                authorInitials: "OR", date: "Just now", relativeDate: "moments ago",
-                refs: [.head], parents: commits.first.map { [$0.shortSHA] } ?? [],
-                files: []
-            )
+            let new = makeCommit(idPrefix: "pulled", summary: "Pulled from origin",
+                                 authorName: "Origin", authorEmail: "origin@example.com", authorInitials: "OR")
             commits.insert(new, at: 0)
         }
         status.behind = 0
@@ -186,7 +173,53 @@ extension MockGitProvider {
         stashes.removeAll { $0.id == stash.id }
     }
 
+    // MARK: History context-menu actions
+
+    public func checkout(_ commit: Commit) async throws { await pause() }   // detaches HEAD; no fixture change
+
+    public func resetHEAD(to commit: Commit, mode: ResetMode) async throws { await pause() }
+
+    public func revert(_ commit: Commit) async throws {
+        // A revert is itself a new commit at the tip — surface one so History updates in the demo.
+        await pause()
+        insertSyntheticCommit(summary: "Revert \u{201C}\(commit.summary)\u{201D}")
+    }
+
+    public func cherryPick(_ commit: Commit) async throws {
+        await pause()
+        insertSyntheticCommit(summary: commit.summary)
+    }
+
+    public func createBranch(named name: String, at commit: Commit) async throws {
+        await pause()
+        if !branches.contains(where: { $0.name == name }) {
+            branches.append(Branch(name: name))
+        }
+    }
+
+    public func createTag(named name: String, at commit: Commit) async throws { await pause() }   // no tag list in the mock
+
     // MARK: Helpers
+
+    private func insertSyntheticCommit(summary: String) {
+        status.ahead += 1
+        commits.insert(makeCommit(summary: summary), at: 0)
+    }
+
+    /// Builds a synthetic commit at the tip (parented on the current newest commit). Shared by
+    /// `commit`, `pull`, and `insertSyntheticCommit` so the four call sites can't drift apart.
+    /// The id doubles as the short SHA; author defaults to the repo's configured author.
+    private func makeCommit(idPrefix: String = "mock", summary: String, body: String = "",
+                            authorName: String? = nil, authorEmail: String = "you@example.com",
+                            authorInitials: String? = nil, files: [FileChange] = []) -> Commit {
+        Commit(
+            id: "\(idPrefix)\(commits.count)", shortSHA: "\(idPrefix)\(commits.count)",
+            summary: summary, body: body,
+            authorName: authorName ?? status.author.name, authorEmail: authorEmail,
+            authorInitials: authorInitials ?? status.author.initials, date: "Just now", relativeDate: "moments ago",
+            refs: [.head], parents: commits.first.map { [$0.shortSHA] } ?? [], files: files
+        )
+    }
 
     private func setStaged(_ paths: [String], to staged: Bool) {
         let set = Set(paths)
