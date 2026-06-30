@@ -46,6 +46,12 @@ private final class DrivableProvider: GitWorkbenchProvider, @unchecked Sendable 
     func applyStash(_ stash: Stash) async throws {}
     func popStash(_ stash: Stash) async throws {}
     func dropStash(_ stash: Stash) async throws {}
+    func checkout(_ commit: Commit) async throws {}
+    func resetHEAD(to commit: Commit, mode: ResetMode) async throws {}
+    func revert(_ commit: Commit) async throws {}
+    func cherryPick(_ commit: Commit) async throws {}
+    func createBranch(named name: String, at commit: Commit) async throws {}
+    func createTag(named name: String, at commit: Commit) async throws {}
 }
 
 @MainActor

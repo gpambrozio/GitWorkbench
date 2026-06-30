@@ -20,6 +20,7 @@ public struct WorkbenchState: Sendable {
     public var commits: [Commit] = []
     public var selectedCommitID: Commit.ID?
     public var selectedCommitFileID: FileChange.ID?
+    public var pendingRefCreation: PendingRefCreation?   // non-nil → name-input popover up
     /// Branch whose history is shown (nil = current HEAD). Set by clicking a branch in the rail.
     public var historyBranch: String?
     /// True while a branch's history is being fetched (shows a spinner in the History list).
@@ -45,5 +46,20 @@ public struct WorkbenchState: Sendable {
     public var canCommit: Bool {
         !staged.isEmpty &&
         !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+/// A pending "Create New Branch/Tag from <commit>" request, holding the typed name until confirmed.
+public struct PendingRefCreation: Sendable, Identifiable {
+    public enum Kind: Sendable { case branch, tag }
+    public let id = UUID()
+    public var kind: Kind
+    public var commit: Commit
+    public var name: String = ""
+
+    public init(kind: Kind, commit: Commit, name: String = "") {
+        self.kind = kind
+        self.commit = commit
+        self.name = name
     }
 }

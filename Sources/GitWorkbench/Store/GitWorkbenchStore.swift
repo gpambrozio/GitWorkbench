@@ -533,6 +533,78 @@ public extension GitWorkbenchStore {
         }
     }
 
+    // MARK: Commit context-menu intents
+
+    /// Check out a commit (detaches HEAD). History then follows the detached HEAD.
+    func checkout(_ commit: Commit) async {
+        do {
+            try await provider.checkout(commit)
+            state.historyBranch = nil
+            await reload()
+            state.toast = .success("Checked out \(commit.shortSHA)")
+        } catch {
+            setError(error)
+        }
+    }
+
+    func resetHEAD(to commit: Commit, mode: ResetMode) async {
+        do {
+            try await provider.resetHEAD(to: commit, mode: mode)
+            await reload()
+            state.toast = .success("Reset HEAD to \(commit.shortSHA) (\(mode.rawValue))")
+        } catch {
+            setError(error)
+        }
+    }
+
+    func revert(_ commit: Commit) async {
+        do {
+            try await provider.revert(commit)
+            await reload()
+            state.toast = .success("Reverted \(commit.shortSHA)")
+        } catch {
+            setError(error)
+        }
+    }
+
+    func cherryPick(_ commit: Commit) async {
+        do {
+            try await provider.cherryPick(commit)
+            await reload()
+            state.toast = .success("Cherry-picked \(commit.shortSHA)")
+        } catch {
+            setError(error)
+        }
+    }
+
+    // MARK: New-branch / new-tag input flow (mirrors the discard confirm popover)
+
+    func requestCreateBranch(at commit: Commit) { state.pendingRefCreation = .init(kind: .branch, commit: commit) }
+    func requestCreateTag(at commit: Commit) { state.pendingRefCreation = .init(kind: .tag, commit: commit) }
+    func setPendingRefName(_ name: String) { state.pendingRefCreation?.name = name }
+    func cancelRefCreation() { state.pendingRefCreation = nil }
+
+    func confirmRefCreation() async {
+        guard let pending = state.pendingRefCreation else { return }
+        let name = pending.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        state.pendingRefCreation = nil
+        do {
+            switch pending.kind {
+            case .branch:
+                try await provider.createBranch(named: name, at: pending.commit)
+                await reload()
+                state.toast = .success("Created branch \(name)")
+            case .tag:
+                try await provider.createTag(named: name, at: pending.commit)
+                await reload()
+                state.toast = .success("Created tag \(name)")
+            }
+        } catch {
+            setError(error)
+        }
+    }
+
     private func removeStashAndReselect(_ id: Stash.ID) {
         guard let idx = state.stashes.firstIndex(where: { $0.id == id }) else { return }
         state.stashes.remove(at: idx)

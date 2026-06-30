@@ -186,7 +186,45 @@ extension MockGitProvider {
         stashes.removeAll { $0.id == stash.id }
     }
 
+    // MARK: History context-menu actions
+
+    public func checkout(_ commit: Commit) async throws { await pause() }   // detaches HEAD; no fixture change
+
+    public func resetHEAD(to commit: Commit, mode: ResetMode) async throws { await pause() }
+
+    public func revert(_ commit: Commit) async throws {
+        // A revert is itself a new commit at the tip — surface one so History updates in the demo.
+        await pause()
+        insertSyntheticCommit(summary: "Revert \u{201C}\(commit.summary)\u{201D}")
+    }
+
+    public func cherryPick(_ commit: Commit) async throws {
+        await pause()
+        insertSyntheticCommit(summary: commit.summary)
+    }
+
+    public func createBranch(named name: String, at commit: Commit) async throws {
+        await pause()
+        if !branches.contains(where: { $0.name == name }) {
+            branches.append(Branch(name: name))
+        }
+    }
+
+    public func createTag(named name: String, at commit: Commit) async throws { await pause() }   // no tag list in the mock
+
     // MARK: Helpers
+
+    private func insertSyntheticCommit(summary: String) {
+        status.ahead += 1
+        let new = Commit(
+            id: "mock\(commits.count)", shortSHA: "mock\(commits.count)",
+            summary: summary, body: "",
+            authorName: status.author.name, authorEmail: "you@example.com",
+            authorInitials: status.author.initials, date: "Just now", relativeDate: "moments ago",
+            refs: [.head], parents: commits.first.map { [$0.shortSHA] } ?? [], files: []
+        )
+        commits.insert(new, at: 0)
+    }
 
     private func setStaged(_ paths: [String], to staged: Bool) {
         let set = Set(paths)

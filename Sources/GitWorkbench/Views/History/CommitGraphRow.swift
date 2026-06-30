@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// A commit list row: graph column (line + node) + summary/refs + author/relative/sha.
 struct CommitGraphRow: View {
@@ -45,5 +46,37 @@ struct CommitGraphRow: View {
         .contentShape(Rectangle())
         .onTapGesture { Task { await store.selectCommit(commit.id) } }
         .onHover { hover = $0 }
+        .contextMenu { contextMenu }
+    }
+
+    @ViewBuilder
+    private var contextMenu: some View {
+        let sha = commit.shortSHA
+        Button("Copy Commit Hash to Clipboard") { copy(commit.id, label: "commit hash") }
+        Button("Copy Commit Message to Clipboard") { copy(fullMessage, label: "commit message") }
+        Divider()
+        Button("Check Out \u{201C}\(sha)\u{201D}") { Task { await store.checkout(commit) } }
+        Menu("Reset HEAD to \u{201C}\(sha)\u{201D}") {
+            Button("Soft \u{2014} keep all changes staged") { Task { await store.resetHEAD(to: commit, mode: .soft) } }
+            Button("Mixed \u{2014} keep changes, unstaged") { Task { await store.resetHEAD(to: commit, mode: .mixed) } }
+            Button("Hard \u{2014} discard all changes") { Task { await store.resetHEAD(to: commit, mode: .hard) } }
+        }
+        Divider()
+        Button("Revert \u{201C}\(sha)\u{201D}") { Task { await store.revert(commit) } }
+        Button("Cherry-Pick \u{201C}\(sha)\u{201D}") { Task { await store.cherryPick(commit) } }
+        Divider()
+        Button("Create New Branch from \u{201C}\(sha)\u{201D}\u{2026}") { store.requestCreateBranch(at: commit) }
+        Button("Create New Tag from \u{201C}\(sha)\u{201D}\u{2026}") { store.requestCreateTag(at: commit) }
+    }
+
+    /// The full commit message: summary plus body, matching what `git log` shows.
+    private var fullMessage: String {
+        commit.body.isEmpty ? commit.summary : "\(commit.summary)\n\n\(commit.body)"
+    }
+
+    private func copy(_ text: String, label: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        store.showToast("Copied \(label) to clipboard")
     }
 }
