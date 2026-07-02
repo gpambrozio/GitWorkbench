@@ -38,6 +38,11 @@ struct FileListRow: View {
                 .contentShape(Rectangle())
                 .onTapGesture { Task { await store.toggleStage(file.id) } }
                 .changesRowDoubleClickExcluded(in: Self.rowSpace)
+                .accessibilityRepresentation {
+                    Toggle("Staged", isOn: Binding(
+                        get: { file.isStaged },
+                        set: { _ in Task { await store.toggleStage(file.id) } }))
+                }
             StatusGlyph(status: file.status, selected: selected, size: 15)
             Text(file.name)
                 .font(.system(size: 12.5, weight: .medium))
