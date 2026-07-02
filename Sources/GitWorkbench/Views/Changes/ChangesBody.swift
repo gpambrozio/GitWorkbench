@@ -21,6 +21,6 @@ struct ChangesBody: View {
             ChangesDiffPane(store: store)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .overlay { if let file = store.state.pendingDiscard { ConfirmDiscardPopover(store: store, file: file) } }
+        .overlay { if let file = store.pendingDiscard { ConfirmDiscardPopover(store: store, file: file) } }
     }
 }

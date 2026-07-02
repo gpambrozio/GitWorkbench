@@ -27,7 +27,7 @@ struct FileListRow: View {
     private var fileURL: URL { file.url(relativeTo: store.configuration.repositoryURL) }
 
     var body: some View {
-        let selected = store.state.selectedFileID == file.id
+        let selected = store.selectedFileID == file.id
         HStack(spacing: 8) {
             StageBox(checked: file.isStaged)
                 .contentShape(Rectangle())

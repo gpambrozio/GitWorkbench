@@ -9,7 +9,7 @@ struct CommitGraphRow: View {
     let commit: Commit
 
     var body: some View {
-        let selected = store.state.selectedCommitID == commit.id
+        let selected = store.selectedCommitID == commit.id
         HStack(spacing: 0) {
             ZStack {
                 Rectangle().fill(selected ? .white : theme.sepStrong).frame(width: 2).frame(maxHeight: .infinity)
@@ -71,7 +71,7 @@ struct CommitGraphRow: View {
         // branch so a commit picked from that log can't silently move/lose work on the checked-out
         // branch. Check Out / Revert / Cherry-Pick act on the real commit SHA non-destructively, so
         // they stay enabled regardless of which branch is being browsed.
-        .disabled(store.state.isBrowsingOtherBranch)
+        .disabled(store.isBrowsingOtherBranch)
         Divider()
         Button("Revert \u{201C}\(sha)\u{201D}") { Task { await store.revert(commit) } }
         Button("Cherry-Pick \u{201C}\(sha)\u{201D}") { Task { await store.cherryPick(commit) } }

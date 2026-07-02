@@ -9,10 +9,10 @@ struct StashDetail: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            DetailFilesBlock(files: stash.files, selectedID: store.state.selectedStashFileID) {
+            DetailFilesBlock(files: stash.files, selectedID: store.selectedStashFileID) {
                 store.selectStashFile($0)
             }
-            DetailDiffArea(store: store, selectedFileID: store.state.selectedStashFileID)
+            DetailDiffArea(store: store, selectedFileID: store.selectedStashFileID)
         }
     }
 

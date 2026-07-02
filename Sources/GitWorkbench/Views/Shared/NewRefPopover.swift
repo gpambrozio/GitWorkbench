@@ -15,7 +15,7 @@ struct NewRefPopover: View {
     private var actionTitle: String { isBranch ? "Create Branch" : "Create Tag" }
 
     private var nameBinding: Binding<String> {
-        Binding(get: { store.state.pendingRefCreation?.name ?? "" },
+        Binding(get: { store.pendingRefCreation?.name ?? "" },
                 set: { store.setPendingRefName($0) })
     }
 

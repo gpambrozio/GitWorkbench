@@ -8,8 +8,8 @@ struct ChangesFileList: View {
     @State private var changesCollapsed = false
 
     var body: some View {
-        let staged = store.state.staged
-        let unstaged = store.state.unstaged
+        let staged = store.staged
+        let unstaged = store.unstaged
         if staged.isEmpty && unstaged.isEmpty {
             EmptyState(icon: IconLibrary.check, title: "Working tree clean",
                        subtitle: "No changes to commit.", iconColor: theme.statusAdded)

@@ -12,17 +12,17 @@ struct HistoryBody: View {
                 HStack(spacing: 8) {
                     Image(systemName: IconLibrary.history).font(.system(size: 12)).foregroundStyle(theme.ink3)
                     Text("HISTORY").font(.system(size: 11, weight: .bold)).tracking(0.4).foregroundStyle(theme.ink3)
-                    Text("\(store.state.commits.count)").font(.system(size: 11, weight: .semibold).monospacedDigit())
+                    Text("\(store.commits.count)").font(.system(size: 11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(theme.ink3).padding(.horizontal, 6).padding(.vertical, 1)
                         .background(theme.neutralFill(0.06), in: Capsule())
                     Spacer()
-                    BranchPill(name: store.state.historyBranch ?? store.state.repo.currentBranch,
+                    BranchPill(name: store.historyBranch ?? store.repo.currentBranch,
                                dim: true, showsChevron: false, height: 24)
                 }
                 .padding(.horizontal, 14).frame(height: 44)
                 .overlay(alignment: .bottom) { Rectangle().fill(theme.sep).frame(height: 1) }
 
-                if store.state.isLoadingHistory {
+                if store.isLoadingHistory {
                     VStack(spacing: 8) {
                         ProgressView().controlSize(.small)
                         Text("Loading history\u{2026}").font(.system(size: 11.5)).foregroundStyle(theme.ink3)
@@ -31,7 +31,7 @@ struct HistoryBody: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(store.state.commits) { CommitGraphRow(store: store, commit: $0) }
+                            ForEach(store.commits) { CommitGraphRow(store: store, commit: $0) }
                         }
                     }
                 }
@@ -42,7 +42,7 @@ struct HistoryBody: View {
             ResizeDivider(width: $layout.historyListWidth, range: layout.historyListRange)
 
             Group {
-                if let commit = store.state.commits.first(where: { $0.id == store.state.selectedCommitID }) {
+                if let commit = store.commits.first(where: { $0.id == store.selectedCommitID }) {
                     CommitDetail(store: store, commit: commit)
                 } else {
                     EmptyState(icon: IconLibrary.history, title: "Select a commit",
@@ -53,8 +53,8 @@ struct HistoryBody: View {
             .background(theme.winBg)
         }
         .overlay {
-            if let pending = store.state.pendingRefCreation { NewRefPopover(store: store, pending: pending) }
-            if let commit = store.state.pendingHardReset { ConfirmResetPopover(store: store, commit: commit) }
+            if let pending = store.pendingRefCreation { NewRefPopover(store: store, pending: pending) }
+            if let commit = store.pendingHardReset { ConfirmResetPopover(store: store, commit: commit) }
         }
     }
 }

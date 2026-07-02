@@ -25,7 +25,7 @@ public struct GitWorkbenchView: View {
                 WorkspaceRail(store: store)
                     .frame(width: layout.railWidth)
                 ResizeDivider(width: $layout.railWidth, range: layout.railRange)
-                body(for: store.state.activeView)
+                body(for: store.activeView)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .environmentObject(layout)
@@ -54,7 +54,7 @@ public struct GitWorkbenchView: View {
 
     @ViewBuilder
     private var toastOverlay: some View {
-        if let toast = store.state.toast {
+        if let toast = store.toast {
             ToastView(toast: toast)
                 .padding(.bottom, Tokens.toastBottomInset)
                 .transition(.opacity)

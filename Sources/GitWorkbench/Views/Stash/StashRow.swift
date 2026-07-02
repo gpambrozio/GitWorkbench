@@ -8,7 +8,7 @@ struct StashRow: View {
     let stash: Stash
 
     var body: some View {
-        let selected = store.state.selectedStashID == stash.id
+        let selected = store.selectedStashID == stash.id
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
                 Text(stash.ref)

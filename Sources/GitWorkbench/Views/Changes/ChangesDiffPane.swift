@@ -9,14 +9,14 @@ struct ChangesDiffPane: View {
         VStack(spacing: 0) {
             if let file = selectedFile {
                 header(file)
-                if let diff = store.state.currentDiff, diff.file.id == file.id {
-                    DiffView(diff: diff, mode: store.state.diffMode)
+                if let diff = store.currentDiff, diff.file.id == file.id {
+                    DiffView(diff: diff, mode: store.diffMode)
                 } else {
                     Spacer()
                 }
             } else {
                 EmptyState(icon: IconLibrary.file,
-                           title: store.state.repo.files.isEmpty ? "Nothing to show \u{2014} working tree is clean"
+                           title: store.repo.files.isEmpty ? "Nothing to show \u{2014} working tree is clean"
                                                                   : "Select a file to view changes")
             }
         }
@@ -25,7 +25,7 @@ struct ChangesDiffPane: View {
     }
 
     private var selectedFile: FileChange? {
-        store.state.repo.files.first { $0.id == store.state.selectedFileID }
+        store.repo.files.first { $0.id == store.selectedFileID }
     }
 
     private func header(_ file: FileChange) -> some View {
