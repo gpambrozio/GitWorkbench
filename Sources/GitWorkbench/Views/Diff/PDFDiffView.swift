@@ -11,17 +11,28 @@ struct PDFDiffView: View {
     let file: FileChange
 
     var body: some View {
-        if let oldData = content.old, let newData = content.new {
+        // Parse up front (cheap — PDFDocument is lazy) so bytes that aren't a valid PDF (truncated or
+        // corrupt blob, mislabeled extension) show the placeholder instead of a blank PDFView, the way
+        // ImageDiffView falls back on a failed image decode. `PDFDocumentView` re-parses internally,
+        // guarded on the data, so the reader's scroll/zoom survives a re-render.
+        let oldData = content.old.flatMap(renderablePDF)
+        let newData = content.new.flatMap(renderablePDF)
+        if let oldData, let newData {
             HStack(spacing: 14) {
                 labeled("Before", oldData)
                 labeled("After", newData)
             }
             .padding(16)
-        } else if let data = content.new ?? content.old {
+        } else if let data = newData ?? oldData {
             PDFDocumentView(data: data).padding(16)
         } else {
             BinaryPlaceholder(file: file, caption: "Can\u{2019}t display PDF")
         }
+    }
+
+    /// `data` if PDFKit can parse it as a document, else nil (→ placeholder).
+    private func renderablePDF(_ data: Data) -> Data? {
+        PDFDocument(data: data) != nil ? data : nil
     }
 
     private func labeled(_ title: String, _ data: Data) -> some View {

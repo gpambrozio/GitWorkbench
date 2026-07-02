@@ -38,7 +38,7 @@ final class BinaryContentTests: XCTestCase {
     // MARK: Fixtures wire real image/PDF bytes for the mock-backed demo & previews.
 
     func test_fixtureModifiedImageHasBothSides() throws {
-        let banner = Fixtures.files.first { $0.path == "assets/banner.png" }!
+        let banner = try XCTUnwrap(Fixtures.files.first { $0.path == "assets/banner.png" })
         let diff = try XCTUnwrap(FixtureDiffs.diff(for: banner, context: .workingTree(staged: false)))
         XCTAssertTrue(diff.isBinary)
         let content = try XCTUnwrap(diff.binaryContent)
@@ -50,7 +50,7 @@ final class BinaryContentTests: XCTestCase {
     }
 
     func test_fixtureAddedImageHasOnlyNew() throws {
-        let shot = Fixtures.files.first { $0.path == "assets/screenshot.png" }!
+        let shot = try XCTUnwrap(Fixtures.files.first { $0.path == "assets/screenshot.png" })
         let diff = try XCTUnwrap(FixtureDiffs.diff(for: shot, context: .workingTree(staged: false)))
         let content = try XCTUnwrap(diff.binaryContent)
         XCTAssertNil(content.old, "an added file has no before")
@@ -58,7 +58,7 @@ final class BinaryContentTests: XCTestCase {
     }
 
     func test_fixturePDFContent() throws {
-        let spec = Fixtures.files.first { $0.path == "docs/spec.pdf" }!
+        let spec = try XCTUnwrap(Fixtures.files.first { $0.path == "docs/spec.pdf" })
         let diff = try XCTUnwrap(FixtureDiffs.diff(for: spec, context: .workingTree(staged: false)))
         let content = try XCTUnwrap(diff.binaryContent)
         XCTAssertEqual(content.kind, .pdf)

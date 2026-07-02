@@ -98,6 +98,46 @@ final class CLIGitProviderBinaryTests: XCTestCase {
         XCTAssertEqual(Array(try XCTUnwrap(content.new)), pdf(2))
     }
 
+    func test_deletedImage_hasOnlyOld() async throws {
+        try writeBytes("gone.png", png(3)); try await git(["add", "."]); try await git(["commit", "-m", "add"])
+        try FileManager.default.removeItem(at: repo.appendingPathComponent("gone.png"))   // unstaged deletion
+
+        let file = FileChange(path: "gone.png", status: .deleted, isStaged: false)
+        let diff = try await loadDiff(file, .workingTree(staged: false))
+        XCTAssertTrue(diff.isBinary)
+        let content = try XCTUnwrap(diff.binaryContent)
+        XCTAssertEqual(Array(try XCTUnwrap(content.old)), png(3), "old = index blob")
+        XCTAssertNil(content.new, "a deleted file has no new side")
+    }
+
+    func test_commitContext_rootCommitAdd_hasNoParentBlob() async throws {
+        // Binary added in the repo's very first commit: `<root>^` has no parent, so `old` must be nil
+        // (git reports "invalid object name"), not an error that misrepresents the add.
+        try writeBytes("first.png", png(5)); try await git(["add", "."]); try await git(["commit", "-m", "root"])
+
+        let commits = try await provider.loadHistory(of: nil, before: nil, limit: 10)
+        let root = try XCTUnwrap(commits.first { $0.summary == "root" })
+        let file = try XCTUnwrap(root.files.first { $0.path == "first.png" })
+        let diff = try await loadDiff(file, .commit(root.id))
+        let content = try XCTUnwrap(diff.binaryContent)
+        XCTAssertNil(content.old, "no parent blob at the root commit")
+        XCTAssertEqual(Array(try XCTUnwrap(content.new)), png(5))
+    }
+
+    func test_stashContext_loadsBaseAndStashBlobs() async throws {
+        try writeBytes("s.png", png(1)); try await git(["add", "."]); try await git(["commit", "-m", "v1"])
+        try writeBytes("s.png", png(2)); try await git(["stash", "push", "-m", "wip"])
+
+        let stashes = try await provider.loadStashes()
+        let stash = try XCTUnwrap(stashes.first)
+        let file = try XCTUnwrap(stash.files.first { $0.path == "s.png" })
+        let diff = try await loadDiff(file, .stash(stash.ref))
+        XCTAssertTrue(diff.isBinary)
+        let content = try XCTUnwrap(diff.binaryContent)
+        XCTAssertEqual(Array(try XCTUnwrap(content.old)), png(1), "old = stash base blob")
+        XCTAssertEqual(Array(try XCTUnwrap(content.new)), png(2), "new = stash blob")
+    }
+
     func test_nonRenderableBinary_getsNoContent() async throws {
         // A `.bin` is binary to git but not image/PDF → the plain "Binary file" placeholder (nil content).
         try writeBytes("data.bin", [0x00, 0x01, 0x02, 0x00, 0xFF]); try await git(["add", "."]); try await git(["commit", "-m", "bin"])

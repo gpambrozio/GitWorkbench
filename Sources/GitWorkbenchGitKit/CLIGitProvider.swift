@@ -122,7 +122,7 @@ public struct CLIGitProvider: GitWorkbenchProvider {
         let parsed = DiffParser.parse(unifiedDiff: text, file: request.file)
         // A binary git can't show as text: if it's an image/PDF we can render, load the old/new bytes
         // so the pane shows the picture instead of the "Binary file" placeholder (issue #12).
-        if parsed.isBinary, let content = await binaryContent(for: request) {
+        if parsed.isBinary, let content = try await binaryContent(for: request) {
             return FileDiff(file: request.file, hunks: [], isBinary: true, binaryContent: content)
         }
         return parsed
@@ -130,49 +130,99 @@ public struct CLIGitProvider: GitWorkbenchProvider {
 
     // MARK: Binary (image/PDF) content
 
+    /// Above this an image/PDF is treated as too large to render inline: we skip it and fall back to
+    /// the placeholder rather than pull hundreds of MB into memory and hand it to NSImage/PDFKit.
+    private static let maxBinaryBytes = 10 * 1024 * 1024   // 10 MB
+
+    /// The outcome of reading one side's bytes.
+    private enum BlobLoad: Sendable {
+        case bytes(Data)
+        case absent      // not in this tree — expected for an added/deleted side
+        case tooLarge    // over `maxBinaryBytes` — render the placeholder instead
+        var data: Data? { if case .bytes(let d) = self { return d } else { return nil } }
+    }
+
     /// Loads the old/new blob bytes for a binary file the viewer can render (image/PDF). Returns nil
-    /// for a binary kind we don't render, or when neither side's bytes could be read — either way the
-    /// pane falls back to the placeholder. A missing side is expected and encoded as nil: an added file
-    /// has no `old`, a deleted file no `new`.
-    private func binaryContent(for request: DiffRequest) async -> BinaryContent? {
+    /// for a binary kind we don't render, when neither side has bytes, or when a side is over the size
+    /// cap — the pane then falls back to the placeholder. A missing side is expected and encoded as
+    /// nil: an added file has no `old`, a deleted file no `new`. A git failure that is *not* "absent at
+    /// this revision" propagates, so an unexpected error can't masquerade as an add/delete.
+    private func binaryContent(for request: DiffRequest) async throws -> BinaryContent? {
         guard let kind = BinaryContent.kind(forPath: request.file.path) else { return nil }
         let path = request.file.path
-        let old: Data?, new: Data?
+        // Independent blob reads run concurrently (like loadStatus/commitFiles), which matters here
+        // because `git show` on a binary blob is one of the slower calls.
+        let oldLoad: BlobLoad, newLoad: BlobLoad
         switch request.context {
         case .workingTree(let staged):
             if staged {
-                old = try? await blobData("HEAD:\(path)")   // last committed version
-                new = try? await blobData(":\(path)")        // staged (index) version
+                async let head = blob("HEAD:\(path)")    // last committed version
+                async let index = blob(":\(path)")        // staged (index) version
+                oldLoad = try await head; newLoad = try await index
             } else {
-                old = try? await blobData(":\(path)")        // index version (nil when untracked)
-                new = workingTreeData(path)                  // on-disk version (nil when deleted)
+                async let index = blob(":\(path)")        // index version (absent when untracked)
+                async let disk = diskBlob(path)            // on-disk version (absent when deleted)
+                oldLoad = try await index; newLoad = await disk
             }
         case .commit(let id):
-            old = try? await blobData("\(id)^:\(path)")      // parent (nil at the root commit)
-            new = try? await blobData("\(id):\(path)")       // this commit (nil when deleted here)
+            async let parent = blob("\(id)^:\(path)")     // parent (absent at the root commit)
+            async let here = blob("\(id):\(path)")         // this commit (absent when deleted here)
+            oldLoad = try await parent; newLoad = try await here
         case .stash(let id):
-            old = try? await blobData("\(id)^:\(path)")
-            new = try? await blobData("\(id):\(path)")
+            async let base = blob("\(id)^:\(path)")
+            async let tip = blob("\(id):\(path)")
+            oldLoad = try await base; newLoad = try await tip
         }
+        // Over the cap on either side → placeholder for the whole file, not a misleading one-sided view.
+        if case .tooLarge = oldLoad { return nil }
+        if case .tooLarge = newLoad { return nil }
+        let old = oldLoad.data, new = newLoad.data
         guard old != nil || new != nil else { return nil }
         return BinaryContent(kind: kind, old: old, new: new)
     }
 
-    /// Raw bytes of the blob addressed by a `<rev>:<path>` spec, throwing when it doesn't exist there
-    /// (so callers use `try?` to map "absent at this rev" → nil, e.g. an added file has no parent blob).
-    private func blobData(_ spec: String) async throws -> Data {
-        let result = try await runner.run(["show", spec])
-        guard result.exitCode == 0 else {
-            throw GitError.commandFailed(arguments: ["show", spec], code: result.exitCode, stderr: result.stderr)
+    /// Bytes of the blob addressed by a `<rev>:<path>` spec. `.absent` when git reports it simply isn't
+    /// in that tree (an added file's parent, the root commit's parent) — the expected empty side —
+    /// `.tooLarge` past the cap. Any *other* git failure is thrown rather than silently mapped to
+    /// "absent", so an unexpected error doesn't misrepresent the diff. The size is probed from the blob
+    /// header (no content transfer) so an oversized blob is never materialised.
+    private func blob(_ spec: String) async throws -> BlobLoad {
+        let sizeText: String
+        do {
+            sizeText = try await runner.output(["cat-file", "-s", spec]).text
+        } catch GitError.commandFailed(_, _, let stderr) where Self.isMissingBlob(stderr) {
+            return .absent
         }
-        return result.stdout
+        guard let bytes = Int(sizeText.trimmingCharacters(in: .whitespacesAndNewlines)),
+              bytes <= Self.maxBinaryBytes else { return .tooLarge }
+        return .bytes(try await runner.output(["show", spec]).stdout)
     }
 
-    /// The working-tree file's bytes read straight off disk — the "new" side of an unstaged change —
-    /// or nil if it isn't there (an unstaged deletion). Resolved against the repository root, like the
-    /// rest of the provider's repo-relative paths.
-    private func workingTreeData(_ path: String) -> Data? {
-        try? Data(contentsOf: runner.repositoryURL.appending(path: path))
+    /// True when git's stderr says a path/rev simply isn't in the given tree (as opposed to a real
+    /// failure). These are the messages `git cat-file`/`git show` emit for an absent blob.
+    private static func isMissingBlob(_ stderr: String) -> Bool {
+        stderr.contains("does not exist in")               // fatal: path 'x' does not exist in 'HEAD'
+            || stderr.contains("exists on disk, but not in") // fatal: path 'x' exists on disk, but not in the index
+            || stderr.contains("invalid object name")        // fatal: invalid object name '<sha>^'  (no parent)
+    }
+
+    /// The working-tree file's bytes read straight off disk — the "new" side of an unstaged change.
+    /// `.absent` when it isn't there (an unstaged deletion), `.tooLarge` past the cap. Read on a
+    /// background queue and memory-mapped, like `GitRunner.readToEnd`, so a large file never blocks a
+    /// Swift cooperative-executor thread. Resolved against the repository root like the provider's
+    /// other repo-relative paths.
+    private func diskBlob(_ path: String) async -> BlobLoad {
+        let url = runner.repositoryURL.appending(path: path)
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize else {
+                    continuation.resume(returning: .absent); return
+                }
+                guard size <= Self.maxBinaryBytes else { continuation.resume(returning: .tooLarge); return }
+                let data = try? Data(contentsOf: url, options: .mappedIfSafe)
+                continuation.resume(returning: data.map(BlobLoad.bytes) ?? .absent)
+            }
+        }
     }
 
     /// An untracked file has no tracked diff, so `git diff -- <path>` is empty. Show its whole
