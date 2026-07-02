@@ -245,6 +245,20 @@ final class StoreReducerTests: XCTestCase {
         XCTAssertNotNil(store.state.selectedFileID)
         XCTAssertNotNil(store.state.currentDiff)
     }
+
+    @MainActor
+    func test_granularPropertiesMirrorSnapshot() async {
+        let store = GitWorkbenchStore(provider: MockGitProvider())
+        await store.reload()
+        store.setCommitMessage("hello")
+        // Granular properties and the compatibility snapshot must agree.
+        XCTAssertEqual(store.commits, store.state.commits)
+        XCTAssertEqual(store.repo, store.state.repo)
+        XCTAssertEqual(store.commitMessage, "hello")
+        XCTAssertEqual(store.state.commitMessage, "hello")
+        XCTAssertEqual(store.staged, store.state.staged)
+        XCTAssertEqual(store.canCommit, store.state.canCommit)
+    }
 }
 
 /// A provider whose reads return fixtures but whose actions always throw — for error-path tests.
