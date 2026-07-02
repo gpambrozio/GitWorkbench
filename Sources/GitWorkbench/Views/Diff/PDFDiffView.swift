@@ -8,24 +8,37 @@ import PDFKit
 struct PDFDiffView: View {
     let content: BinaryContent
     let file: FileChange
+    @State private var validated: Validated?
+
+    /// Sides that PDFKit confirmed parseable (nil side → placeholder logic below).
+    private struct Validated {
+        var old: Data?
+        var new: Data?
+    }
 
     var body: some View {
-        // Parse up front (cheap — PDFDocument is lazy) so bytes that aren't a valid PDF (truncated or
-        // corrupt blob, mislabeled extension) show the placeholder instead of a blank PDFView, the way
-        // ImageDiffView falls back on a failed image decode. `PDFDocumentView` re-parses internally,
-        // guarded on the data, so the reader's scroll/zoom survives a re-render.
-        let oldData = content.old.flatMap(renderablePDF)
-        let newData = content.new.flatMap(renderablePDF)
-        if let oldData, let newData {
-            HStack(spacing: 14) {
-                labeled("Before", oldData)
-                labeled("After", newData)
+        ZStack {
+            if let validated {
+                if let oldData = validated.old, let newData = validated.new {
+                    HStack(spacing: 14) {
+                        labeled("Before", oldData)
+                        labeled("After", newData)
+                    }
+                    .padding(16)
+                } else if let data = validated.new ?? validated.old {
+                    PDFDocumentView(data: data).padding(16)
+                } else {
+                    BinaryPlaceholder(file: file, caption: "Can\u{2019}t display PDF")
+                }
+            } else {
+                ProgressView().controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding(16)
-        } else if let data = newData ?? oldData {
-            PDFDocumentView(data: data).padding(16)
-        } else {
-            BinaryPlaceholder(file: file, caption: "Can\u{2019}t display PDF")
+        }
+        .task(id: file.id) {
+            await Task.yield()   // let the spinner paint first (PDFDocument is main-actor here)
+            validated = Validated(old: content.old.flatMap(renderablePDF),
+                                  new: content.new.flatMap(renderablePDF))
         }
     }
 
