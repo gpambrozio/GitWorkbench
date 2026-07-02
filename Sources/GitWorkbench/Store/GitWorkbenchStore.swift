@@ -36,6 +36,15 @@ public final class GitWorkbenchStore {
     public private(set) var selectedStashID: Stash.ID?
     public private(set) var selectedStashFileID: FileChange.ID?
     public private(set) var currentDiff: FileDiff?
+    /// True while a diff load for the current selection is in flight (drives the
+    /// panes' loading spinner). Mirrors `isLoadingHistory`. Not part of the
+    /// `state` snapshot — like `hasLoaded`, it is transient store-side state.
+    public private(set) var isLoadingDiff = false
+    /// True when the most recent diff load completed with no diff (provider threw).
+    /// Distinguishes a real failure from a stale `currentDiff` (e.g. after a tab
+    /// switch), so the panes' "Couldn't load diff" state never lies. Shares
+    /// `currentDiff`'s single-slot semantics; resets when any new load starts.
+    public private(set) var didFailDiffLoad = false
     public private(set) var isBusy = false
     public private(set) var toast: Toast?
 
@@ -301,6 +310,8 @@ public final class GitWorkbenchStore {
                 selectedCommitID = nil
                 selectedCommitFileID = nil
                 currentDiff = nil
+                isLoadingDiff = false
+                didFailDiffLoad = false
             }
         } catch {
             isLoadingHistory = false
@@ -325,9 +336,13 @@ public final class GitWorkbenchStore {
         selectedFileID = id
         guard let file = repo.files.first(where: { $0.id == id }) else {
             currentDiff = nil
+            isLoadingDiff = false
+            didFailDiffLoad = false
             return
         }
         let context: DiffRequest.Context = .workingTree(staged: file.isStaged)
+        isLoadingDiff = true
+        didFailDiffLoad = false
         diffTask?.cancel()
         diffTask = Task { [weak self] in
             await self?.loadDiff(for: file, context: context)
@@ -340,7 +355,11 @@ public final class GitWorkbenchStore {
     func loadDiff(for file: FileChange, context: DiffRequest.Context) async {
         let request = DiffRequest(file: file, context: context, mode: diffMode)
         let diff = try? await provider.loadDiff(request)
-        if !Task.isCancelled { currentDiff = diff }
+        if !Task.isCancelled {
+            currentDiff = diff
+            isLoadingDiff = false
+            didFailDiffLoad = (diff == nil)
+        }
     }
 
     /// Maps an error to a toast message and shows it.
@@ -420,6 +439,9 @@ public extension GitWorkbenchStore {
             if selectedFileID == file.id {
                 selectedFileID = nil
                 currentDiff = nil
+                diffTask?.cancel()
+                isLoadingDiff = false
+                didFailDiffLoad = false
             }
             toast = .success("Discarded changes in \(file.name)")
         } catch {
@@ -440,6 +462,9 @@ public extension GitWorkbenchStore {
             commits.insert(newCommit, at: 0)
             selectedFileID = nil
             currentDiff = nil
+            diffTask?.cancel()
+            isLoadingDiff = false
+            didFailDiffLoad = false
             toast = .success("Committed \(staged.count) file(s) \u{00B7} \u{201C}\(newCommit.summary)\u{201D}")
         } catch {
             setError(error)
@@ -555,6 +580,8 @@ public extension GitWorkbenchStore {
         guard let commitID = selectedCommitID,
               let file = commits.first(where: { $0.id == commitID })?.files.first(where: { $0.id == fileID })
         else { return }
+        isLoadingDiff = true
+        didFailDiffLoad = false
         diffTask?.cancel()
         diffTask = Task { [weak self] in await self?.loadDiff(for: file, context: .commit(commitID)) }
     }
@@ -564,6 +591,8 @@ public extension GitWorkbenchStore {
         guard let stashID = selectedStashID,
               let file = stashes.first(where: { $0.id == stashID })?.files.first(where: { $0.id == fileID })
         else { return }
+        isLoadingDiff = true
+        didFailDiffLoad = false
         diffTask?.cancel()
         diffTask = Task { [weak self] in await self?.loadDiff(for: file, context: .stash(stashID)) }
     }
@@ -581,9 +610,16 @@ public extension GitWorkbenchStore {
         guard let commit = commits.first(where: { $0.id == id }) else { return }
         selectedCommitFileID = commit.files.first?.id
         if let first = commit.files.first {
-            await loadDiff(for: first, context: .commit(id))
+            isLoadingDiff = true
+            didFailDiffLoad = false
+            diffTask?.cancel()
+            let task: Task<Void, Never> = Task { [weak self] in await self?.loadDiff(for: first, context: .commit(id)) }
+            diffTask = task
+            await task.value
         } else {
             currentDiff = nil
+            isLoadingDiff = false
+            didFailDiffLoad = false
         }
     }
 
@@ -592,9 +628,16 @@ public extension GitWorkbenchStore {
         guard let stash = stashes.first(where: { $0.id == id }) else { return }
         selectedStashFileID = stash.files.first?.id
         if let first = stash.files.first {
-            await loadDiff(for: first, context: .stash(id))
+            isLoadingDiff = true
+            didFailDiffLoad = false
+            diffTask?.cancel()
+            let task: Task<Void, Never> = Task { [weak self] in await self?.loadDiff(for: first, context: .stash(id)) }
+            diffTask = task
+            await task.value
         } else {
             currentDiff = nil
+            isLoadingDiff = false
+            didFailDiffLoad = false
         }
     }
 
@@ -722,6 +765,8 @@ public extension GitWorkbenchStore {
             selectedStashID = nil
             selectedStashFileID = nil
             currentDiff = nil
+            isLoadingDiff = false
+            didFailDiffLoad = false
             return
         }
         let nextIdx = min(idx, stashes.count - 1)
@@ -729,12 +774,16 @@ public extension GitWorkbenchStore {
         selectedStashID = next.id
         selectedStashFileID = next.files.first?.id
         if let first = next.files.first {
+            isLoadingDiff = true
+            didFailDiffLoad = false
             diffTask?.cancel()
             diffTask = Task { [weak self] in
                 await self?.loadDiff(for: first, context: .stash(next.id))
             }
         } else {
             currentDiff = nil
+            isLoadingDiff = false
+            didFailDiffLoad = false
         }
     }
 }
