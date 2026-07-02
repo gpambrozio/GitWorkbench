@@ -59,16 +59,19 @@ public struct GitWorkbenchView: View {
 
     @ViewBuilder
     private var toastOverlay: some View {
-        if let toast = store.toast {
-            ToastView(toast: toast)
-                .padding(.bottom, Tokens.toastBottomInset)
-                .transition(.opacity)
-                .task(id: toast.id) {
-                    guard toast.style != .progress else { return }
-                    try? await Task.sleep(for: .seconds(2.2))
-                    store.dismissToast()
-                }
+        ZStack {
+            if let toast = store.toast {
+                ToastView(toast: toast)
+                    .padding(.bottom, Tokens.toastBottomInset)
+                    .transition(.opacity)
+                    .task(id: toast.id) {
+                        guard toast.style != .progress else { return }
+                        try? await Task.sleep(for: .seconds(2.2))
+                        store.dismissToast()
+                    }
+            }
         }
+        .animation(.easeInOut(duration: 0.18), value: store.toast)
     }
 }
 
