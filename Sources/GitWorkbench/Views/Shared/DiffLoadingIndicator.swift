@@ -17,6 +17,7 @@ struct DiffLoadingIndicator: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
             try? await Task.sleep(for: Self.gracePeriod)
+            guard !Task.isCancelled else { return }
             visible = true
         }
     }

@@ -79,8 +79,7 @@ struct DetailDiffArea: View {
             DiffView(diff: diff, mode: store.diffMode)
         } else if store.isLoadingDiff {
             DiffLoadingIndicator()
-        } else if selectedFileID != nil {
-            // A file is selected but its diff never arrived: the load failed.
+        } else if store.didFailDiffLoad {
             EmptyState(icon: IconLibrary.file, title: "Couldn\u{2019}t load diff")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {

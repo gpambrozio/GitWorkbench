@@ -20,12 +20,16 @@ Out of scope: provider/protocol changes; the synchronous split-row derivation co
 
 ## Design
 
-### Store: explicit `isLoadingDiff`
+### Store: explicit `isLoadingDiff` and `didFailDiffLoad`
 
 `GitWorkbenchStore` gains `public private(set) var isLoadingDiff = false` (additive API; mirrors the existing `isLoadingHistory` precedent). Explicit rather than derived ("selected but no matching diff") because a derived flag cannot distinguish loading from failed and would spin forever after a failure.
 
 - Set `true` at every site that starts a diff task: `select(file:)`, `selectCommit(_:)`, `selectStash(_:)`, `selectCommitFile(_:)`, `selectStashFile(_:)`, `removeStashAndReselect(_:)`.
 - Cleared (`false`) in `loadDiff(for:context:)` on completion, inside the existing `if !Task.isCancelled` guard — a cancelled stale task must not clear the flag for a newer in-flight load. Selection paths that end with *no* diff task (empty commit/stash, unknown file id) set it `false` (or never set it `true`).
+
+A second flag, `public private(set) var didFailDiffLoad = false`, records whether the *most recent* load completed with no diff (the provider threw). `currentDiff` is a single shared slot across tabs, so "selection exists but `currentDiff` doesn't match" is ambiguous between a real failure and a stale cross-tab selection (e.g. the Changes tab's file is still selected while History shows a different diff) — `didFailDiffLoad` disambiguates. It is set in `loadDiff(for:context:)` alongside `isLoadingDiff = false` (`diff == nil`), and reset to `false` at every site that also touches `isLoadingDiff` outside `loadDiff` (both the "started a load" and the "no diff task, nil the selection" sites), so a new selection or a cleared selection always starts from a clean slate.
+
+`selectCommit(_:)` and `selectStash(_:)` route their diff load through `diffTask` (cancel-then-await) exactly like `select(file:)`, rather than awaiting `loadDiff` directly — otherwise a stale load's completion could clear `isLoadingDiff`/overwrite `currentDiff` after a newer selection had already started loading (e.g. clicking commit A then B in quick succession).
 
 ### Shared view: `DiffLoadingIndicator`
 
@@ -37,13 +41,15 @@ New `Sources/GitWorkbench/Views/Shared/DiffLoadingIndicator.swift`: renders `Col
 
 1. Matching diff (`currentDiff.file.id == selectedID`) → `DiffView` (unchanged).
 2. `store.isLoadingDiff` → `DiffLoadingIndicator`.
-3. File selected but diff nil (load failed) → `EmptyState(icon: file, title: "Couldn't load diff")` — new state, previously an eternal blank.
-4. No selection → existing empty states (unchanged).
+3. `store.didFailDiffLoad` → `EmptyState(icon: file, title: "Couldn't load diff")` — the real-failure state, now keyed on the explicit flag rather than inferred from "selected but no matching diff".
+4. Otherwise → the pane's neutral state: `ChangesDiffPane` falls back to a blank `Spacer()` (the pre-feature default) and `DetailDiffArea` falls back to "Select a file to view changes". This covers both "nothing selected" and a stale cross-tab selection (a selection exists elsewhere but this pane's diff hasn't loaded and didn't fail) — neither is a lie the way an unconditional "Couldn't load diff" would be.
 
 ### Testing
 
 Store tests with `MockGitProvider(delay:)` (nonzero delay): flag true mid-flight; false after success; false after failure (provider that throws); correct across a rapid selection switch (cancel + new load — flag stays true until the *new* load finishes). The 200ms visual delay is verified interactively in the demo (mock's 700ms latency makes it visible); no SwiftUI unit test per the zero-dependency constraint.
 
+`didFailDiffLoad` is covered the same way: true after a `FailingProvider` load, false after a `MockGitProvider` success. The `selectCommit`/`selectStash` cancellation fix is covered by selecting commit A then B in quick succession (via `MockGitProvider(delay:)`) and asserting the settled state reflects B, not a clobber from A's late completion.
+
 ### Constraints
 
-Zero third-party dependencies; macOS 15+/Swift 6 v6; visuals per design handoff (spinner style matches existing `ProgressView().controlSize(.small)` usage); `isLoadingDiff` is additive public API.
+Zero third-party dependencies; macOS 15+/Swift 6 v6; visuals per design handoff (spinner style matches existing `ProgressView().controlSize(.small)` usage); `isLoadingDiff` and `didFailDiffLoad` are additive public API.
