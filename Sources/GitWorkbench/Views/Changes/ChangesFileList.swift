@@ -55,7 +55,7 @@ struct ChangesFileList: View {
                 Text("\(count)").font(.system(size: 11, weight: .semibold).monospacedDigit())
                     .foregroundStyle(theme.ink3)
                     .padding(.horizontal, 6).padding(.vertical, 1)
-                    .background(Color.black.opacity(0.06), in: Capsule())
+                    .background(theme.neutralFill(0.06), in: Capsule())
                 Spacer()
                 Button(actionTitle, action: action)
                     .font(.system(size: 11, weight: .semibold)).foregroundStyle(theme.accentDeep).buttonStyle(.plain)

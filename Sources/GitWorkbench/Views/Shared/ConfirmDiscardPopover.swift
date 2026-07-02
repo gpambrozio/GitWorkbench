@@ -19,7 +19,7 @@ struct ConfirmDiscardPopover: View {
                 Text("This will permanently discard \(file.additions + file.deletions) line change(s). You can\u{2019}t undo this.")
                     .font(.system(size: 12.5)).foregroundStyle(theme.ink2).multilineTextAlignment(.center)
                 HStack(spacing: 10) {
-                    capsuleButton("Cancel", fill: Color.black.opacity(0.07), fg: theme.ink) { store.cancelDiscard() }
+                    capsuleButton("Cancel", fill: theme.neutralFill(0.07), fg: theme.ink) { store.cancelDiscard() }
                     capsuleButton("Discard Changes", fill: theme.statusDeleted, fg: .white) { Task { await store.confirmDiscard() } }
                 }
             }

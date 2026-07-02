@@ -95,7 +95,7 @@ struct FileListRow: View {
                     .font(.system(size: 11))
                     .foregroundStyle(selected ? .white : theme.ink2)
                     .frame(width: 20, height: 20)
-                    .background(selected ? Color.white.opacity(0.18) : Color.black.opacity(0.06),
+                    .background(selected ? Color.white.opacity(0.18) : theme.neutralFill(0.06),
                                 in: RoundedRectangle(cornerRadius: 5))
             }
             .buttonStyle(.plain)
@@ -121,7 +121,7 @@ struct FileListRow: View {
 
     private func rowBackground(selected: Bool) -> Color {
         if selected { return theme.accent }
-        if hover { return Color.black.opacity(0.04) }
+        if hover { return theme.neutralFill(0.04) }
         return .clear
     }
 }

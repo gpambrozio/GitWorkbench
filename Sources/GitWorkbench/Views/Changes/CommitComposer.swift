@@ -36,7 +36,7 @@ struct CommitComposer: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(canCommit ? .white : theme.ink3)
                 .frame(maxWidth: .infinity).frame(height: 30)
-                .background(canCommit ? theme.accent : Color.black.opacity(0.07),
+                .background(canCommit ? theme.accent : theme.neutralFill(0.07),
                             in: RoundedRectangle(cornerRadius: 7))
             }
             .buttonStyle(.plain)

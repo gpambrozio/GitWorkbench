@@ -34,7 +34,7 @@ struct StashRow: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(selected ? theme.accent : (hover ? Color.black.opacity(0.04) : .clear))
+        .background(selected ? theme.accent : (hover ? theme.neutralFill(0.04) : .clear))
         .overlay(alignment: .bottom) { Rectangle().fill(theme.sep).frame(height: 1) }
         .contentShape(Rectangle())
         .onTapGesture { Task { await store.selectStash(stash.id) } }

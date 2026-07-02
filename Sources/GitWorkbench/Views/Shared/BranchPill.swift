@@ -32,7 +32,7 @@ struct BranchPill: View {
         }
         .padding(.horizontal, 10)
         .frame(height: height)
-        .background(Color.black.opacity(0.05),
+        .background(theme.neutralFill(0.05),
                     in: RoundedRectangle(cornerRadius: Tokens.buttonRadius, style: .continuous))
     }
 }

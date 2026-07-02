@@ -20,7 +20,7 @@ struct SectionHeader: View {
                     .foregroundStyle(theme.ink3)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1)
-                    .background(Color.black.opacity(0.06), in: Capsule())
+                    .background(theme.neutralFill(0.06), in: Capsule())
             }
             Spacer(minLength: 8)
             if let actionTitle, let action {

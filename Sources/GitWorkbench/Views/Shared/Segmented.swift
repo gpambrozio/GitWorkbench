@@ -44,7 +44,7 @@ struct Segmented<Value: Hashable>: View {
             }
         }
         .padding(2)
-        .background(Color.black.opacity(0.06),
+        .background(theme.neutralFill(0.06),
                     in: RoundedRectangle(cornerRadius: Tokens.segmentOuterRadius, style: .continuous))
     }
 }

@@ -40,7 +40,7 @@ struct CommitDetail: View {
                         .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
                         .foregroundStyle(theme.ink2)
                         .padding(.horizontal, 8).frame(height: 24)
-                        .background(Color.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                        .background(theme.neutralFill(0.06), in: RoundedRectangle(cornerRadius: 6))
                 }.buttonStyle(.plain)
             }
             .padding(.top, 14)

@@ -20,7 +20,7 @@ struct ConfirmResetPopover: View {
                 Text("This moves HEAD and permanently discards all staged and unstaged changes. You can\u{2019}t undo this.")
                     .font(.system(size: 12.5)).foregroundStyle(theme.ink2).multilineTextAlignment(.center)
                 HStack(spacing: 10) {
-                    capsuleButton("Cancel", fill: Color.black.opacity(0.07), fg: theme.ink) { store.cancelHardReset() }
+                    capsuleButton("Cancel", fill: theme.neutralFill(0.07), fg: theme.ink) { store.cancelHardReset() }
                     capsuleButton("Discard & Reset", fill: theme.statusDeleted, fg: .white) { Task { await store.confirmHardReset() } }
                 }
             }

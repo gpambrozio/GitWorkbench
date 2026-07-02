@@ -14,7 +14,7 @@ struct HistoryBody: View {
                     Text("HISTORY").font(.system(size: 11, weight: .bold)).tracking(0.4).foregroundStyle(theme.ink3)
                     Text("\(store.state.commits.count)").font(.system(size: 11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(theme.ink3).padding(.horizontal, 6).padding(.vertical, 1)
-                        .background(Color.black.opacity(0.06), in: Capsule())
+                        .background(theme.neutralFill(0.06), in: Capsule())
                     Spacer()
                     BranchPill(name: store.state.historyBranch ?? store.state.repo.currentBranch,
                                dim: true, showsChevron: false, height: 24)
