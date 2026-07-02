@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The reusable git-workbench component: toolbar + rail + active workspace view, themed and toasted.
 public struct GitWorkbenchView: View {
-    private var store: GitWorkbenchStore
+    private let store: GitWorkbenchStore
     @State private var layout: ColumnLayout
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.repositorySummaryObserver) private var summaryObserver
@@ -34,6 +34,10 @@ public struct GitWorkbenchView: View {
         .background(theme.winBg)
         .foregroundStyle(theme.ink)
         .workbenchTheme(theme)
+        // A host can swap stores at the same view identity (e.g. LiveDemo's Open…);
+        // @State layout would keep the first store's seeds. Re-identify on the
+        // persistence key so a different embedding context re-seeds its layout.
+        .id(configuration.persistenceKey)
         .overlay(alignment: .bottom) { toastOverlay }
         // Drive the host observer off `store.summary` so it fires only once a load has
         // completed — never with the pre-load placeholder — matching the headless
