@@ -138,6 +138,23 @@ final class CLIGitProviderBinaryTests: XCTestCase {
         XCTAssertEqual(Array(try XCTUnwrap(content.new)), png(2), "new = stash blob")
     }
 
+    func test_conflictedBinary_fallsBackToPlaceholder() async throws {
+        // A merge-conflicted image has no stage-0 entry, so `git cat-file -s :pic.png` fails with a
+        // message we don't classify as "absent" → binaryContent throws. loadDiff must fall back to the
+        // plain "Binary file" placeholder (isBinary, nil content), not let the error blank the pane.
+        try writeBytes("pic.png", png(1)); try await git(["add", "."]); try await git(["commit", "-m", "v1"])
+        try await git(["checkout", "-b", "feature"])
+        try writeBytes("pic.png", png(2)); try await git(["add", "."]); try await git(["commit", "-m", "feat"])
+        try await git(["checkout", "main"])
+        try writeBytes("pic.png", png(3)); try await git(["add", "."]); try await git(["commit", "-m", "main2"])
+        _ = try await GitRunner(repositoryURL: repo).run(["merge", "feature"])   // exit 1: binary conflict
+
+        let file = FileChange(path: "pic.png", status: .conflicted, isStaged: false)
+        let diff = try await loadDiff(file, .workingTree(staged: false))
+        XCTAssertTrue(diff.isBinary, "a conflicted binary still shows as binary")
+        XCTAssertNil(diff.binaryContent, "an unclassifiable git error falls back to the placeholder, not a blank pane")
+    }
+
     func test_nonRenderableBinary_getsNoContent() async throws {
         // A `.bin` is binary to git but not image/PDF → the plain "Binary file" placeholder (nil content).
         try writeBytes("data.bin", [0x00, 0x01, 0x02, 0x00, 0xFF]); try await git(["add", "."]); try await git(["commit", "-m", "bin"])

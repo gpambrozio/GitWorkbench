@@ -41,7 +41,7 @@ final class WorkbenchThemeTests: XCTestCase {
     }
 
     func test_publicInitDefaultsUnsetTokensToStandard() {
-        let theme = WorkbenchTheme(accent: Color(red: 0.86, green: 0.18, blue: 0.46), winBg: .black)
+        let theme = WorkbenchTheme(isDark: false, accent: Color(red: 0.86, green: 0.18, blue: 0.46), winBg: .black)
         XCTAssertEqual(rgb(theme.accent).r, 0.86, accuracy: 0.01)   // overridden
         XCTAssertEqual(rgb(theme.winBg).r, 0, accuracy: 0.01)       // overridden (black)
         // an unset token falls back to the light standard

@@ -19,19 +19,26 @@ struct ImageDiffView: View {
     let file: FileChange
     private let oldImage: NSImage?
     private let newImage: NSImage?
+    /// Whether both sides carried bytes (a genuine modification). Used to tell a real add/delete apart
+    /// from a modification where one side simply failed to decode.
+    private let bothSidesHadBytes: Bool
 
     init(content: BinaryContent, file: FileChange) {
         self.file = file
         self.oldImage = content.old.flatMap { NSImage(data: $0) }
         self.newImage = content.new.flatMap { NSImage(data: $0) }
+        self.bothSidesHadBytes = content.old != nil && content.new != nil
     }
 
     var body: some View {
         if let oldImage, let newImage {
             ModifiedImageComparer(old: oldImage, new: newImage)
-        } else if let single = newImage ?? oldImage {
+        } else if !bothSidesHadBytes, let single = newImage ?? oldImage {
             ImageCanvas(image: single).padding(16)   // added / deleted: fill the available space
         } else {
+            // Placeholder, not a one-sided image: either nothing decoded, or a modification where only
+            // one side decoded (a corrupt/unsupported blob, or a Git-LFS pointer) — which would
+            // otherwise be mislabeled as an add/delete.
             BinaryPlaceholder(file: file, caption: "Can\u{2019}t display image")
         }
     }

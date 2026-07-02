@@ -5,7 +5,8 @@ import SwiftUI
 public struct WorkbenchTheme: Sendable {
     public var adoptsSystemAccent: Bool
     /// Whether this is a dark variant. Drives `neutralFill(_:)` so subtle black tints invert to white
-    /// on the dark surface. Set on `.darkStandard`; a custom dark theme should start from it.
+    /// on the dark surface. Required at init (no default) — only the caller knows whether the surfaces
+    /// it's supplying are light or dark, so it must say.
     public var isDark: Bool
 
     // accent family
@@ -49,11 +50,12 @@ public struct WorkbenchTheme: Sendable {
     public var hunkHeaderBg: Color
 
     /// Build a custom theme. Every token defaults to the light identity (`.standard`), so a host can
-    /// override only what it wants — e.g. `WorkbenchTheme(accent: .pink, winBg: .black)`. For a dark
-    /// variant, start from `.darkStandard` and copy-and-tweak, or pass it as `configuration.darkTheme`.
+    /// override only what it wants — e.g. `WorkbenchTheme(isDark: true, accent: .pink, winBg: .black)`.
+    /// `isDark` is required so a host supplying dark surfaces also opts its neutral tints into dark. For
+    /// a dark variant, start from `.darkStandard` and copy-and-tweak, or pass it as `configuration.darkTheme`.
     public init(
         adoptsSystemAccent: Bool = false,
-        isDark: Bool = false,
+        isDark: Bool,
         accent: Color = Self.standard.accent,
         accentDeep: Color = Self.standard.accentDeep,
         accentSoft: Color = Self.standard.accentSoft,
@@ -137,6 +139,7 @@ public struct WorkbenchTheme: Sendable {
     /// Light purple identity (default).
     public static let standard = WorkbenchTheme(
         adoptsSystemAccent: false,
+        isDark: false,
         accent: Color(hex: 0x7C5CE0),
         accentDeep: Color(hex: 0x6A49D4),
         accentSoft: Color(hex: 0x7C5CE0, opacity: 0.13),

@@ -124,8 +124,11 @@ public struct CLIGitProvider: GitWorkbenchProvider {
         }
         let parsed = DiffParser.parse(unifiedDiff: text, file: request.file)
         // A binary git can't show as text: if it's an image/PDF we can render, load the old/new bytes
-        // so the pane shows the picture instead of the "Binary file" placeholder (issue #12).
-        if parsed.isBinary, let content = try await binaryContent(for: request) {
+        // so the pane shows the picture instead of the "Binary file" placeholder (issue #12). Best-effort
+        // via `try?`: loading the bytes can only ever improve on the placeholder, so an unclassified git
+        // failure (a conflicted blob, a localized git whose stderr we don't recognise) falls back to the
+        // plain placeholder rather than surfacing as a blank pane through the store's own `try?`.
+        if parsed.isBinary, let content = try? await binaryContent(for: request) {
             return FileDiff(file: request.file, hunks: [], isBinary: true, binaryContent: content)
         }
         return parsed
@@ -210,10 +213,12 @@ public struct CLIGitProvider: GitWorkbenchProvider {
     }
 
     /// The working-tree file's bytes read straight off disk — the "new" side of an unstaged change.
-    /// `.absent` when it isn't there (an unstaged deletion), `.tooLarge` past the cap. Read on a
-    /// background queue and memory-mapped, like `GitRunner.readToEnd`, so a large file never blocks a
-    /// Swift cooperative-executor thread. Resolved against the repository root like the provider's
-    /// other repo-relative paths.
+    /// `.absent` when it isn't there (an unstaged deletion), `.tooLarge` past the cap. Read fully into
+    /// memory (a copy, bounded by the size cap) on a background queue, like `GitRunner.readToEnd`, so a
+    /// large file never blocks a Swift cooperative-executor thread. Deliberately *not* memory-mapped: the
+    /// bytes are retained in state, and a live working-tree file truncated/replaced out from under a
+    /// mapping would `SIGBUS` when its pages are touched. Resolved against the repository root like the
+    /// provider's other repo-relative paths.
     private func diskBlob(_ path: String) async -> BlobLoad {
         let url = runner.repositoryURL.appending(path: path)
         return await withCheckedContinuation { continuation in
@@ -222,7 +227,7 @@ public struct CLIGitProvider: GitWorkbenchProvider {
                     continuation.resume(returning: .absent); return
                 }
                 guard size <= Self.maxBinaryBytes else { continuation.resume(returning: .tooLarge); return }
-                let data = try? Data(contentsOf: url, options: .mappedIfSafe)
+                let data = try? Data(contentsOf: url)
                 continuation.resume(returning: data.map(BlobLoad.bytes) ?? .absent)
             }
         }

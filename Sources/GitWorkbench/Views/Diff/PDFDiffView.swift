@@ -6,7 +6,6 @@ import PDFKit
 /// (`autoScales`) and scrolling, so a large document scales down to fit and pages beyond the first
 /// stay reachable.
 struct PDFDiffView: View {
-    @Environment(\.workbenchTheme) private var theme
     let content: BinaryContent
     let file: FileChange
 
