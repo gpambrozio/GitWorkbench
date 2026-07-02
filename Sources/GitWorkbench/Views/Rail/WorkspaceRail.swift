@@ -155,7 +155,8 @@ private struct RailBranchesSection: View {
         RailItem(icon: IconLibrary.branch, title: displayName, count: nil,
                  selected: activeView == .history && remote.id == historyBranch,
                  emphasized: remote.id == upstream, indent: indent,
-                 doubleAction: { Task { await store.checkoutRemoteBranch(remote) } })
+                 doubleAction: { Task { await store.checkoutRemoteBranch(remote) } },
+                 doubleActionName: "Check out this branch")
         { Task { await store.showHistory(of: remote) } }
         .help("Click to view history \u{00B7} double-click to check out")
     }
@@ -309,6 +310,9 @@ private struct RailItem: View {
     /// Optional double-click action. When set, a single click runs `action` and a double-click runs
     /// this — used for branch rows (click = view history, double-click = switch).
     var doubleAction: (() -> Void)? = nil
+    /// VoiceOver name for the `doubleAction` accessibility action — "Switch to this branch" for local
+    /// rows, "Check out this branch" for remote rows (see `remoteBranchRow`).
+    var doubleActionName: String = "Switch to this branch"
     let action: () -> Void
 
     var body: some View {
@@ -317,6 +321,12 @@ private struct RailItem: View {
                 label
                     .onTapGesture(count: 2, perform: doubleAction)
                     .onTapGesture(count: 1, perform: action)
+                    // Stacked tap gestures aren't exclusive: the single-click action also fires en
+                    // route to a double-click (showHistory is idempotent, so that's harmless).
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { action() }
+                    .accessibilityAction(named: doubleActionName) { doubleAction() }
             } else {
                 Button(action: action) { label }.buttonStyle(.plain)
             }

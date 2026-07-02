@@ -10,6 +10,16 @@ struct CommitGraphRow: View {
     let selected: Bool
 
     var body: some View {
+        Button { Task { await store.selectCommit(commit.id) } } label: {
+            rowContent
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .contextMenu { contextMenu }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: 0) {
             ZStack {
                 Rectangle().fill(selected ? .white : theme.sepStrong).frame(width: 2).frame(maxHeight: .infinity)
@@ -43,10 +53,6 @@ struct CommitGraphRow: View {
         .frame(maxWidth: .infinity)
         .background(selected ? theme.accent : (hover ? theme.neutralFill(0.04) : .clear))
         .overlay(alignment: .bottom) { Rectangle().fill(theme.sep).frame(height: 1) }
-        .contentShape(Rectangle())
-        .onTapGesture { Task { await store.selectCommit(commit.id) } }
-        .onHover { hover = $0 }
-        .contextMenu { contextMenu }
     }
 
     @ViewBuilder

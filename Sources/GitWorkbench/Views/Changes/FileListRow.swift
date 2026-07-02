@@ -21,6 +21,18 @@ struct FileListRow: View {
     private var fileURL: URL { file.url(relativeTo: repositoryRoot) }
 
     var body: some View {
+        Button { store.select(file: file.id) } label: {
+            rowContent
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .coordinateSpace(.named(Self.rowSpace))
+        .overlay { FileRowMouseLayer(fileURL: fileURL, exclusions: doubleClickExclusions) }
+        .onPreferenceChange(DoubleClickExcludedFramesKey.self) { doubleClickExclusions = $0 }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: 8) {
             StageBox(checked: file.isStaged)
                 .contentShape(Rectangle())
@@ -48,12 +60,6 @@ struct FileListRow: View {
         .frame(height: Tokens.changesRowHeight)
         .frame(maxWidth: .infinity)
         .background(rowBackground(selected: selected))
-        .contentShape(Rectangle())
-        .onTapGesture { store.select(file: file.id) }
-        .onHover { hover = $0 }
-        .coordinateSpace(.named(Self.rowSpace))
-        .overlay { FileRowMouseLayer(fileURL: fileURL, exclusions: doubleClickExclusions) }
-        .onPreferenceChange(DoubleClickExcludedFramesKey.self) { doubleClickExclusions = $0 }
     }
 
     @ViewBuilder private func trailing(selected: Bool) -> some View {

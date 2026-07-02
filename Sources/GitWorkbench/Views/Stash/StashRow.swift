@@ -9,6 +9,15 @@ struct StashRow: View {
     let selected: Bool
 
     var body: some View {
+        Button { Task { await store.selectStash(stash.id) } } label: {
+            rowContent
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+    }
+
+    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
                 Text(stash.ref)
@@ -36,8 +45,5 @@ struct StashRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(selected ? theme.accent : (hover ? theme.neutralFill(0.04) : .clear))
         .overlay(alignment: .bottom) { Rectangle().fill(theme.sep).frame(height: 1) }
-        .contentShape(Rectangle())
-        .onTapGesture { Task { await store.selectStash(stash.id) } }
-        .onHover { hover = $0 }
     }
 }
