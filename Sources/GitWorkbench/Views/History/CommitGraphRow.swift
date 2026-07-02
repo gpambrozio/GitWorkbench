@@ -23,7 +23,7 @@ struct CommitGraphRow: View {
                 HStack(spacing: 6) {
                     Text(commit.summary).font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(selected ? .white : theme.ink).lineLimit(1)
-                    ForEach(Array(commit.refs.enumerated()), id: \.offset) { _, ref in
+                    ForEach(commit.refs, id: \.self) { ref in
                         RefPill(ref: ref, selected: selected)
                     }
                 }
