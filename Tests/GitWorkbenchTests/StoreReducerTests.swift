@@ -462,6 +462,40 @@ extension StoreReducerTests {
         XCTAssertEqual(store.state.activeView, .history)
         XCTAssertEqual(store.state.historyBranch, "origin/main")
     }
+
+    /// The rail's current-branch ahead/behind is a separate field from `state.repo`, so the store must
+    /// keep it in step after optimistic commit/push/pull — otherwise the rail badge and the toolbar
+    /// Pull/Push badges would disagree until the next reload.
+    private func currentBranchInRail(_ store: GitWorkbenchStore) -> Branch? {
+        store.state.branches.first { $0.name == store.state.repo.currentBranch }
+    }
+
+    func test_commitBumpsCurrentBranchAheadInRail() async {
+        let store = makeStore()
+        await store.reload()
+        XCTAssertEqual(currentBranchInRail(store)?.ahead, 2) // fixture: feat/auto-sync ahead 2
+        store.setCommitMessage("Wire it up")
+        await store.commit()
+        XCTAssertEqual(store.state.repo.ahead, 3)
+        XCTAssertEqual(currentBranchInRail(store)?.ahead, 3) // rail row tracks the toolbar Push badge
+    }
+
+    func test_pushZeroesCurrentBranchAheadInRail() async {
+        let store = makeStore()
+        await store.reload()
+        await store.push()
+        XCTAssertEqual(store.state.repo.ahead, 0)
+        XCTAssertEqual(currentBranchInRail(store)?.ahead, 0)
+    }
+
+    func test_pullZeroesCurrentBranchBehindInRail() async {
+        let store = makeStore()
+        await store.reload()
+        XCTAssertEqual(currentBranchInRail(store)?.behind, 1) // fixture: feat/auto-sync behind 1
+        await store.pull()
+        XCTAssertEqual(store.state.repo.behind, 0)
+        XCTAssertEqual(currentBranchInRail(store)?.behind, 0)
+    }
 }
 
 // MARK: - Commit context-menu intents

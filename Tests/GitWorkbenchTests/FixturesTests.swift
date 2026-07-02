@@ -32,6 +32,14 @@ final class FixturesTests: XCTestCase {
         XCTAssertEqual(Fixtures.stashes.first?.ref, "stash@{0}")
         XCTAssertEqual(Fixtures.branches.map(\.name), ["main", "develop", "feat/auto-sync", "fix/log-levels"])
         XCTAssertEqual(Fixtures.branches.first(where: \.isCurrent)?.name, "feat/auto-sync")
+        // The current branch's rail divergence agrees with the repository status headline (2 ahead, 1 behind).
+        let current = Fixtures.branches.first(where: \.isCurrent)
+        XCTAssertEqual(current?.ahead, Fixtures.repositoryStatus.ahead)
+        XCTAssertEqual(current?.behind, Fixtures.repositoryStatus.behind)
+        // A branch without an upstream reports no divergence.
+        let untracked = Fixtures.branches.first { $0.name == "fix/log-levels" }
+        XCTAssertNil(untracked?.upstream)
+        XCTAssertEqual(untracked.map { [$0.ahead, $0.behind] }, [0, 0])
         XCTAssertEqual(Fixtures.remoteBranches.map(\.id),
                        ["origin/develop", "origin/feat/auto-sync", "origin/main", "origin/release/1.0"])
         // the current branch's upstream is among the remotes (rendered in bold by the rail)
