@@ -48,10 +48,10 @@ struct NewRefPopover: View {
                 }
             }
             .padding(20).frame(width: 360)
+            .defaultFocus($focused, true)
             .background(theme.winBg, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
             .shadow(color: .black.opacity(0.30), radius: 25, y: 18)
         }
-        .onAppear { focused = true }
     }
 
     private func capsuleButton(_ title: String, fill: Color, fg: Color, action: @escaping () -> Void) -> some View {
