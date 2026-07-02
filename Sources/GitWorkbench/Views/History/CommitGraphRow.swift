@@ -7,9 +7,19 @@ struct CommitGraphRow: View {
     @Environment(\.workbenchTheme) private var theme
     @State private var hover = false
     let commit: Commit
+    let selected: Bool
 
     var body: some View {
-        let selected = store.state.selectedCommitID == commit.id
+        Button { Task { await store.selectCommit(commit.id) } } label: {
+            rowContent
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .contextMenu { contextMenu }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: 0) {
             ZStack {
                 Rectangle().fill(selected ? .white : theme.sepStrong).frame(width: 2).frame(maxHeight: .infinity)
@@ -23,7 +33,7 @@ struct CommitGraphRow: View {
                 HStack(spacing: 6) {
                     Text(commit.summary).font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(selected ? .white : theme.ink).lineLimit(1)
-                    ForEach(Array(commit.refs.enumerated()), id: \.offset) { _, ref in
+                    ForEach(commit.refs, id: \.self) { ref in
                         RefPill(ref: ref, selected: selected)
                     }
                 }
@@ -43,10 +53,6 @@ struct CommitGraphRow: View {
         .frame(maxWidth: .infinity)
         .background(selected ? theme.accent : (hover ? theme.neutralFill(0.04) : .clear))
         .overlay(alignment: .bottom) { Rectangle().fill(theme.sep).frame(height: 1) }
-        .contentShape(Rectangle())
-        .onTapGesture { Task { await store.selectCommit(commit.id) } }
-        .onHover { hover = $0 }
-        .contextMenu { contextMenu }
     }
 
     @ViewBuilder
@@ -71,7 +77,7 @@ struct CommitGraphRow: View {
         // branch so a commit picked from that log can't silently move/lose work on the checked-out
         // branch. Check Out / Revert / Cherry-Pick act on the real commit SHA non-destructively, so
         // they stay enabled regardless of which branch is being browsed.
-        .disabled(store.state.isBrowsingOtherBranch)
+        .disabled(store.isBrowsingOtherBranch)
         Divider()
         Button("Revert \u{201C}\(sha)\u{201D}") { Task { await store.revert(commit) } }
         Button("Cherry-Pick \u{201C}\(sha)\u{201D}") { Task { await store.cherryPick(commit) } }

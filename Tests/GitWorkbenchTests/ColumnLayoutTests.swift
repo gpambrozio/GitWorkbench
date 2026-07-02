@@ -1,6 +1,7 @@
 import XCTest
 @testable import GitWorkbench
 
+@MainActor
 final class ColumnLayoutTests: XCTestCase {
 
     /// A reference-backed `WorkbenchLayoutStore` so a second `ColumnLayout` sees the first's writes.

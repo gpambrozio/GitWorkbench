@@ -75,8 +75,13 @@ struct DetailDiffArea: View {
     let selectedFileID: FileChange.ID?
 
     var body: some View {
-        if let diff = store.state.currentDiff, diff.file.id == selectedFileID {
-            DiffView(diff: diff, mode: store.state.diffMode)
+        if let diff = store.currentDiff, diff.file.id == selectedFileID {
+            DiffView(diff: diff, mode: store.diffMode)
+        } else if store.isLoadingDiff {
+            DiffLoadingIndicator()
+        } else if store.didFailDiffLoad {
+            EmptyState(icon: IconLibrary.file, title: "Couldn\u{2019}t load diff")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             EmptyState(icon: IconLibrary.file, title: "Select a file to view changes")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

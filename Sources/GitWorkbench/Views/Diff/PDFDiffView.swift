@@ -4,28 +4,44 @@ import PDFKit
 /// Renders a PDF file. Added/deleted → the single document filling the pane; modified → the old and
 /// new documents side by side (the issue asks for side-by-side PDFs). PDFKit handles scaling
 /// (`autoScales`) and scrolling, so a large document scales down to fit and pages beyond the first
-/// stay reachable.
+/// stay reachable. Validation re-runs whenever `content`'s bytes change — including an external
+/// edit to the same file reloaded by the repository watcher, not just a switch to a different file.
 struct PDFDiffView: View {
     let content: BinaryContent
     let file: FileChange
+    @State private var validated: Validated?
+
+    /// Sides that PDFKit confirmed parseable (nil side → placeholder logic below).
+    private struct Validated {
+        var old: Data?
+        var new: Data?
+    }
 
     var body: some View {
-        // Parse up front (cheap — PDFDocument is lazy) so bytes that aren't a valid PDF (truncated or
-        // corrupt blob, mislabeled extension) show the placeholder instead of a blank PDFView, the way
-        // ImageDiffView falls back on a failed image decode. `PDFDocumentView` re-parses internally,
-        // guarded on the data, so the reader's scroll/zoom survives a re-render.
-        let oldData = content.old.flatMap(renderablePDF)
-        let newData = content.new.flatMap(renderablePDF)
-        if let oldData, let newData {
-            HStack(spacing: 14) {
-                labeled("Before", oldData)
-                labeled("After", newData)
+        ZStack {
+            if let validated {
+                if let oldData = validated.old, let newData = validated.new {
+                    HStack(spacing: 14) {
+                        labeled("Before", oldData)
+                        labeled("After", newData)
+                    }
+                    .padding(16)
+                } else if let data = validated.new ?? validated.old {
+                    PDFDocumentView(data: data).padding(16)
+                } else {
+                    BinaryPlaceholder(file: file, caption: "Can\u{2019}t display PDF")
+                }
+            } else {
+                ProgressView().controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding(16)
-        } else if let data = newData ?? oldData {
-            PDFDocumentView(data: data).padding(16)
-        } else {
-            BinaryPlaceholder(file: file, caption: "Can\u{2019}t display PDF")
+        }
+        .task(id: content) {
+            // Keyed on `content` (not `file.id`) so a bytes change re-validates even when the file
+            // identity is unchanged — e.g. the watcher reloading this same file after an external edit.
+            await Task.yield()   // let the spinner paint first (PDFDocument is main-actor here)
+            validated = Validated(old: content.old.flatMap(renderablePDF),
+                                  new: content.new.flatMap(renderablePDF))
         }
     }
 

@@ -8,7 +8,7 @@ import AppKit
 /// dragging down grows it back up to its natural height. The author row stays pinned below the message.
 /// The chosen height persists via `ColumnLayout` (like the column widths). See `MessageResize`.
 struct CommitDetail: View {
-    @EnvironmentObject private var layout: ColumnLayout
+    @Environment(ColumnLayout.self) private var layout
     var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
     let commit: Commit
@@ -30,7 +30,7 @@ struct CommitDetail: View {
         VStack(spacing: 0) {
             message
             fixedBlock
-            DetailDiffArea(store: store, selectedFileID: store.state.selectedCommitFileID)
+            DetailDiffArea(store: store, selectedFileID: store.selectedCommitFileID)
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { availableHeight = $0 }
     }
@@ -58,7 +58,7 @@ struct CommitDetail: View {
     private var fixedBlock: some View {
         VStack(spacing: 0) {
             author
-            DetailFilesBlock(files: commit.files, selectedID: store.state.selectedCommitFileID) {
+            DetailFilesBlock(files: commit.files, selectedID: store.selectedCommitFileID) {
                 store.selectCommitFile($0)
             }
             RowResizeDivider(

@@ -6,15 +6,16 @@ struct CommitComposer: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        let canCommit = store.state.canCommit
+        @Bindable var store = store
+        let canCommit = store.canCommit
         VStack(spacing: 8) {
             ZStack(alignment: .topLeading) {
-                if store.state.commitMessage.isEmpty {
+                if store.commitMessage.isEmpty {
                     Text("Message (\u{2318}\u{21A9} to commit)")
                         .font(.system(size: 13)).foregroundStyle(theme.ink3)
                         .padding(.horizontal, 12).padding(.vertical, 10).allowsHitTesting(false)
                 }
-                TextEditor(text: messageBinding)
+                TextEditor(text: $store.commitMessage)
                     .font(.system(size: 13))
                     .foregroundStyle(theme.ink)
                     .scrollContentBackground(.hidden)
@@ -49,11 +50,8 @@ struct CommitComposer: View {
     }
 
     private var commitTitle: String {
-        let n = store.state.staged.count
+        let n = store.staged.count
         let files = n == 1 ? "file" : "files"
-        return n > 0 ? "Commit \(n) \(files) to \(store.state.repo.currentBranch)" : "Commit"
-    }
-    private var messageBinding: Binding<String> {
-        Binding(get: { store.state.commitMessage }, set: { store.setCommitMessage($0) })
+        return n > 0 ? "Commit \(n) \(files) to \(store.repo.currentBranch)" : "Commit"
     }
 }

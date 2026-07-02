@@ -9,77 +9,117 @@ struct WorkspaceRail: View {
     /// workbench out and back (a tab/session switch). See `GitWorkbenchStore.applyRailCollapseDefaults`.
 
     var body: some View {
-        let s = store.state
-        // Derived once per body pass so unrelated re-evaluations (hover, selection, scroll) don't
-        // rebuild the tree; it only changes when the branch list does. The repository's default
-        // branch (main/master/develop) is pinned to the top of its list.
-        let localTree = makeBranchTree(s.branches,
-                                       pinnedToTop: defaultBranchName(among: s.branches.map(\.name))) { $0.name }
-        // Built once here (like `localTree`) so the rows and `allCollapsibleFolders` reuse each
-        // remote's tree instead of rebuilding it on every body pass.
-        let remoteTrees = remoteGroups(s.remoteBranches).map { group in
-            RemoteTree(group: group,
-                       tree: makeBranchTree(group.branches,
-                                            pinnedToTop: defaultBranchName(among: group.branches.map(\.name))) { $0.name })
-        }
         // A more stable repo identity than the basename `repositoryName` (two clones can share a
         // folder name): the absolute path when the host supplies a `repositoryURL`, else the basename.
-        let repoID = store.configuration.repositoryURL?.path(percentEncoded: false) ?? s.repo.repositoryName
-        // Changes exactly when the branch lists or current HEAD change — so the default collapse
-        // state is (re)computed then and on first appearance, but not on hover/selection/scroll.
-        let collapseKey = CollapseSignature(repo: repoID, head: s.repo.currentBranch,
-                                            local: s.branches.map(\.id), remote: s.remoteBranches.map(\.id))
+        let repoID = store.configuration.repositoryURL?.path(percentEncoded: false) ?? store.repo.repositoryName
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 railHeader("WORKSPACE")
-                RailItem(icon: IconLibrary.file, title: "Changes", count: s.repo.files.count,
-                         selected: s.activeView == .changes) { store.select(.changes) }
-                RailItem(icon: IconLibrary.history, title: "History", count: s.commits.count,
-                         selected: s.activeView == .history) { store.select(.history) }
-                RailItem(icon: IconLibrary.folder, title: "Stashes", count: s.stashes.count,
-                         selected: s.activeView == .stashes) { store.select(.stashes) }
+                RailItem(icon: IconLibrary.file, title: "Changes", count: store.repo.files.count,
+                         selected: store.activeView == .changes) { store.select(.changes) }
+                RailItem(icon: IconLibrary.history, title: "History", count: store.commits.count,
+                         selected: store.activeView == .history) { store.select(.history) }
+                RailItem(icon: IconLibrary.folder, title: "Stashes", count: store.stashes.count,
+                         selected: store.activeView == .stashes) { store.select(.stashes) }
 
-                railHeader("BRANCHES")
-                BranchTreeRows(nodes: localTree,
-                               depth: 0, keyPrefix: "L:", collapsed: store.railCollapsed,
-                               toggle: { store.toggleRailFolder($0) })
-                { branch, name, indent in
-                    localBranchRow(branch, displayName: name, indent: indent, state: s)
-                }
-
-                if !remoteTrees.isEmpty {
-                    railHeader("REMOTES")
-                    ForEach(remoteTrees) { entry in
-                        let remoteKey = entry.key
-                        FolderRow(name: entry.group.remote, depth: 0, collapsed: store.railCollapsed.contains(remoteKey),
-                                  folderKey: remoteKey)
-                        {
-                            store.toggleRailFolder(remoteKey)
-                        }
-                        if !store.railCollapsed.contains(remoteKey) {
-                            BranchTreeRows(nodes: entry.tree,
-                                           depth: 1, keyPrefix: "\(remoteKey):", collapsed: store.railCollapsed,
-                                           toggle: { store.toggleRailFolder($0) })
-                            { remote, name, indent in
-                                remoteBranchRow(remote, displayName: name, indent: indent, state: s)
-                            }
-                        }
-                    }
-                }
-                Spacer(minLength: 8)
+                // The branch trees are built by a value-diffable child so SwiftUI can skip that work
+                // (and this row's re-render) whenever an unrelated part of `state` changes.
+                RailBranchesSection(store: store,
+                                    branches: store.branches,
+                                    remoteBranches: store.remoteBranches,
+                                    currentBranch: store.repo.currentBranch,
+                                    upstream: store.repo.upstream,
+                                    activeView: store.activeView,
+                                    historyBranch: store.historyBranch,
+                                    railCollapsed: store.railCollapsed,
+                                    repoID: repoID)
             }
             .padding(.bottom, 8)
         }
         .frame(maxWidth: .infinity) // width is set by the parent (resizable)
         .background(theme.sidebarDeep)
+    }
+
+    private func railHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .bold)).tracking(0.4)
+            .foregroundStyle(theme.ink3)
+            .padding(.init(top: 14, leading: 16, bottom: 5, trailing: 16))
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Renders the BRANCHES and REMOTES sections of the rail. Every stored property except `store` is a
+/// value type, and `store` is a stable class reference used only inside action closures — so
+/// SwiftUI skips this view's body, and therefore the tree building it does, whenever the
+/// branch-related inputs are unchanged (e.g. commit-message keystrokes, stage toggles, toasts).
+private struct RailBranchesSection: View {
+    var store: GitWorkbenchStore
+    @Environment(\.workbenchTheme) private var theme
+    let branches: [Branch]
+    let remoteBranches: [RemoteBranch]
+    let currentBranch: String
+    let upstream: String?
+    let activeView: WorkspaceView
+    let historyBranch: String?
+    let railCollapsed: Set<String>
+    let repoID: String
+
+    var body: some View {
+        // Derived once per body pass so unrelated re-evaluations (hover, selection, scroll) don't
+        // rebuild the tree; it only changes when the branch list does. The repository's default
+        // branch (main/master/develop) is pinned to the top of its list.
+        let localTree = makeBranchTree(branches,
+                                       pinnedToTop: defaultBranchName(among: branches.map(\.name))) { $0.name }
+        // Built once here (like `localTree`) so the rows and `allCollapsibleFolders` reuse each
+        // remote's tree instead of rebuilding it on every body pass.
+        let remoteTrees = remoteGroups(remoteBranches).map { group in
+            RemoteTree(group: group,
+                       tree: makeBranchTree(group.branches,
+                                            pinnedToTop: defaultBranchName(among: group.branches.map(\.name))) { $0.name })
+        }
+        // Changes exactly when the branch lists or current HEAD change — so the default collapse
+        // state is (re)computed then and on first appearance, but not on hover/selection/scroll.
+        let collapseKey = CollapseSignature(repo: repoID, head: currentBranch,
+                                            local: branches.map(\.id), remote: remoteBranches.map(\.id))
+        Group {
+            railHeader("BRANCHES")
+            BranchTreeRows(nodes: localTree,
+                           depth: 0, keyPrefix: "L:", collapsed: railCollapsed,
+                           toggle: { store.toggleRailFolder($0) })
+            { branch, name, indent in
+                localBranchRow(branch, displayName: name, indent: indent)
+            }
+
+            if !remoteTrees.isEmpty {
+                railHeader("REMOTES")
+                ForEach(remoteTrees) { entry in
+                    let remoteKey = entry.key
+                    FolderRow(name: entry.group.remote, depth: 0, collapsed: railCollapsed.contains(remoteKey),
+                              folderKey: remoteKey)
+                    {
+                        store.toggleRailFolder(remoteKey)
+                    }
+                    if !railCollapsed.contains(remoteKey) {
+                        BranchTreeRows(nodes: entry.tree,
+                                       depth: 1, keyPrefix: "\(remoteKey):", collapsed: railCollapsed,
+                                       toggle: { store.toggleRailFolder($0) })
+                        { remote, name, indent in
+                            remoteBranchRow(remote, displayName: name, indent: indent)
+                        }
+                    }
+                }
+            }
+            Spacer(minLength: 8)
+        }
         // Initialize/refresh the collapse state when the branches or HEAD change (and on first
         // appearance). New folders default to collapsed; the user's own toggles are preserved.
         .onChange(of: collapseKey, initial: true) {
             store.applyRailCollapseDefaults(allFolders: allCollapsibleFolders(local: localTree, remotes: remoteTrees),
-                                            currentBranch: s.repo.currentBranch,
-                                            headPath: currentBranchExpansion(currentBranch: s.repo.currentBranch,
-                                                                             upstream: s.repo.upstream,
-                                                                             remoteBranches: s.remoteBranches),
+                                            currentBranch: currentBranch,
+                                            headPath: currentBranchExpansion(currentBranch: currentBranch,
+                                                                             upstream: upstream,
+                                                                             remoteBranches: remoteBranches),
                                             repo: repoID)
         }
     }
@@ -97,29 +137,27 @@ struct WorkspaceRail: View {
 
     /// A leaf row for a local branch: click views its history, double-click switches to it. The
     /// checked-out branch is emphasized and carries a "HEAD" badge.
-    private func localBranchRow(_ branch: Branch, displayName: String, indent: CGFloat, state s: WorkbenchState) -> some View {
-        let isCurrent = branch.name == s.repo.currentBranch
+    private func localBranchRow(_ branch: Branch, displayName: String, indent: CGFloat) -> some View {
+        let isCurrent = branch.name == currentBranch
         return RailItem(icon: IconLibrary.branch, title: displayName, count: nil,
-                        selected: s.activeView == .history && branch.name == (s.historyBranch ?? s.repo.currentBranch),
+                        selected: activeView == .history
+                            && branch.name == (historyBranch ?? currentBranch),
                         emphasized: isCurrent, badge: isCurrent ? "HEAD" : nil,
                         ahead: branch.ahead, behind: branch.behind, indent: indent,
                         doubleAction: { Task { await store.switchBranch(to: branch) } })
-        {
-            Task { await store.showHistory(of: branch) }
-        }
+        { Task { await store.showHistory(of: branch) } }
         .help("Click to view history \u{00B7} double-click to switch")
     }
 
     /// A leaf row for a remote-tracking branch: click views its history, double-click checks it out.
     /// The branch the current HEAD tracks is emphasized.
-    private func remoteBranchRow(_ remote: RemoteBranch, displayName: String, indent: CGFloat, state s: WorkbenchState) -> some View {
+    private func remoteBranchRow(_ remote: RemoteBranch, displayName: String, indent: CGFloat) -> some View {
         RailItem(icon: IconLibrary.branch, title: displayName, count: nil,
-                 selected: s.activeView == .history && remote.id == s.historyBranch,
-                 emphasized: remote.id == s.repo.upstream, indent: indent,
-                 doubleAction: { Task { await store.checkoutRemoteBranch(remote) } })
-        {
-            Task { await store.showHistory(of: remote) }
-        }
+                 selected: activeView == .history && remote.id == historyBranch,
+                 emphasized: remote.id == upstream, indent: indent,
+                 doubleAction: { Task { await store.checkoutRemoteBranch(remote) } },
+                 doubleActionName: "Check out this branch")
+        { Task { await store.showHistory(of: remote) } }
         .help("Click to view history \u{00B7} double-click to check out")
     }
 
@@ -272,6 +310,9 @@ private struct RailItem: View {
     /// Optional double-click action. When set, a single click runs `action` and a double-click runs
     /// this — used for branch rows (click = view history, double-click = switch).
     var doubleAction: (() -> Void)? = nil
+    /// VoiceOver name for the `doubleAction` accessibility action — "Switch to this branch" for local
+    /// rows, "Check out this branch" for remote rows (see `remoteBranchRow`).
+    var doubleActionName: String = "Switch to this branch"
     let action: () -> Void
 
     var body: some View {
@@ -280,6 +321,12 @@ private struct RailItem: View {
                 label
                     .onTapGesture(count: 2, perform: doubleAction)
                     .onTapGesture(count: 1, perform: action)
+                    // Stacked tap gestures aren't exclusive: the single-click action also fires en
+                    // route to a double-click (showHistory is idempotent, so that's harmless).
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { action() }
+                    .accessibilityAction(named: doubleActionName) { doubleAction() }
             } else {
                 Button(action: action) { label }.buttonStyle(.plain)
             }

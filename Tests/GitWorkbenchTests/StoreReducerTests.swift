@@ -245,6 +245,106 @@ final class StoreReducerTests: XCTestCase {
         XCTAssertNotNil(store.state.selectedFileID)
         XCTAssertNotNil(store.state.currentDiff)
     }
+
+    @MainActor
+    func test_granularPropertiesMirrorSnapshot() async {
+        let store = GitWorkbenchStore(provider: MockGitProvider())
+        await store.reload()
+        store.setCommitMessage("hello")
+        // Granular properties and the compatibility snapshot must agree.
+        XCTAssertEqual(store.commits, store.state.commits)
+        XCTAssertEqual(store.repo, store.state.repo)
+        XCTAssertEqual(store.commitMessage, "hello")
+        XCTAssertEqual(store.state.commitMessage, "hello")
+        XCTAssertEqual(store.staged, store.state.staged)
+        XCTAssertEqual(store.canCommit, store.state.canCommit)
+    }
+
+    // MARK: Diff-loading flag (spinner support)
+
+    func test_isLoadingDiffDuringAndAfterLoad() async throws {
+        let store = GitWorkbenchStore(provider: MockGitProvider(delay: .milliseconds(80)))
+        await store.reload()
+        let file = try XCTUnwrap(store.repo.files.first)
+        store.select(file: file.id)
+        XCTAssertTrue(store.isLoadingDiff)          // in flight
+        await store.diffTask?.value
+        XCTAssertFalse(store.isLoadingDiff)         // cleared on success
+        XCTAssertEqual(store.currentDiff?.file.id, file.id)
+    }
+
+    func test_isLoadingDiffClearsOnFailure() async throws {
+        let store = GitWorkbenchStore(provider: FailingProvider())  // loadDiff throws
+        await store.reload()
+        let file = try XCTUnwrap(store.repo.files.first)
+        store.select(file: file.id)
+        await store.diffTask?.value
+        XCTAssertFalse(store.isLoadingDiff)         // failure must not spin forever
+        XCTAssertNil(store.currentDiff)             // panes show "Couldn't load diff"
+    }
+
+    func test_isLoadingDiffSurvivesRapidReselection() async throws {
+        let store = GitWorkbenchStore(provider: MockGitProvider(delay: .milliseconds(80)))
+        await store.reload()
+        let a = try XCTUnwrap(store.repo.files.first)
+        let b = try XCTUnwrap(store.repo.files.dropFirst().first)
+        store.select(file: a.id)
+        let staleTask = store.diffTask
+        store.select(file: b.id)                    // cancels A's load, starts B's
+        XCTAssertTrue(store.isLoadingDiff)
+        await staleTask?.value                      // A finishing (cancelled) must NOT clear the flag
+        XCTAssertTrue(store.isLoadingDiff)
+        await store.diffTask?.value
+        XCTAssertFalse(store.isLoadingDiff)
+        XCTAssertEqual(store.currentDiff?.file.id, b.id)
+    }
+
+    func test_didFailDiffLoadReflectsFailureAndResets() async throws {
+        let failingStore = GitWorkbenchStore(provider: FailingProvider())
+        await failingStore.reload()
+        let failingFile = try XCTUnwrap(failingStore.repo.files.first)
+        failingStore.select(file: failingFile.id)
+        await failingStore.diffTask?.value
+        XCTAssertTrue(failingStore.didFailDiffLoad)     // real failure surfaced
+        XCTAssertFalse(failingStore.isLoadingDiff)
+
+        let okStore = GitWorkbenchStore(provider: MockGitProvider(delay: .zero))
+        await okStore.reload()
+        let okFile = try XCTUnwrap(okStore.repo.files.first)
+        okStore.select(file: okFile.id)
+        await okStore.diffTask?.value
+        XCTAssertFalse(okStore.didFailDiffLoad)         // success must not carry a stale failure
+    }
+
+    /// Selecting commit A then B while A's load is still in flight must not let A's stale
+    /// completion clobber B's — the fix routes `selectCommit` through `diffTask` (cancel + await)
+    /// exactly like `select(file:)`.
+    func test_rapidCommitReselectionKeepsNewestLoad() async throws {
+        let store = GitWorkbenchStore(provider: MockGitProvider(delay: .milliseconds(80)))
+        await store.reload()
+        let withFiles = store.commits.filter { !$0.files.isEmpty }
+        let a = try XCTUnwrap(withFiles.first, "precondition: fixture needs a commit with files")
+        let b = try XCTUnwrap(withFiles.dropFirst().first, "precondition: fixture needs a second commit with files")
+
+        Task { await store.selectCommit(a.id) }
+
+        var yieldCount = 0
+        while !store.isLoadingDiff {
+            await Task.yield()
+            yieldCount += 1
+            if yieldCount > 100 {
+                XCTFail("timed out waiting for A's load to start")
+                break
+            }
+        }
+
+        await store.selectCommit(b.id)                  // cancels A's load, starts + awaits B's
+        await store.diffTask?.value
+
+        XCTAssertFalse(store.isLoadingDiff)
+        XCTAssertFalse(store.didFailDiffLoad)
+        XCTAssertEqual(store.currentDiff?.file.id, b.files.first?.id)
+    }
 }
 
 /// A provider whose reads return fixtures but whose actions always throw — for error-path tests.

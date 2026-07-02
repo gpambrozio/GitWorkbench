@@ -7,9 +7,9 @@ struct WorkbenchToolbar: View {
     @Environment(\.workbenchTheme) private var theme
 
     var body: some View {
-        let s = store.state
+        @Bindable var store = store
         HStack(spacing: 0) {
-            Text(s.repo.repositoryName)
+            Text(store.repo.repositoryName)
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(theme.ink)
                 .padding(.leading, 20)
@@ -18,29 +18,25 @@ struct WorkbenchToolbar: View {
                 .overlay(alignment: .trailing) { Rectangle().fill(theme.sep).frame(width: 1) }
 
             HStack(spacing: 3) {
-                ToolButton(icon: IconLibrary.pull, label: "Pull", badge: s.repo.behind) { Task { await store.pull() } }
-                    .disabled(s.isBusy)
-                ToolButton(icon: IconLibrary.push, label: "Push", badge: s.repo.ahead) { Task { await store.push() } }
-                    .disabled(s.isBusy)
+                ToolButton(icon: IconLibrary.pull, label: "Pull", badge: store.repo.behind) { Task { await store.pull() } }
+                    .disabled(store.isBusy)
+                ToolButton(icon: IconLibrary.push, label: "Push", badge: store.repo.ahead) { Task { await store.push() } }
+                    .disabled(store.isBusy)
                 ToolButton(icon: IconLibrary.fetch, label: "Fetch") { Task { await store.fetch() } }
-                    .disabled(s.isBusy)
+                    .disabled(store.isBusy)
             }
             .padding(.leading, 14)
 
             Spacer(minLength: 0)
 
-            Segmented(value: diffMode, options: [
-                .init(value: .unified, icon: IconLibrary.unifiedRows),
-                .init(value: .split, icon: IconLibrary.splitColumns),
+            Segmented(value: $store.diffMode, options: [
+                .init(value: .unified, icon: IconLibrary.unifiedRows, accessibilityLabel: "Unified diff"),
+                .init(value: .split, icon: IconLibrary.splitColumns, accessibilityLabel: "Split diff"),
             ])
             .padding(.trailing, 14)
         }
         .frame(height: Tokens.toolbarHeight)
         .background(theme.titlebar)
         .overlay(alignment: .bottom) { Rectangle().fill(theme.sep).frame(height: 1) }
-    }
-
-    private var diffMode: Binding<DiffMode> {
-        Binding(get: { store.state.diffMode }, set: { store.setDiffMode($0) })
     }
 }

@@ -10,7 +10,101 @@ import Observation
 @MainActor
 @Observable
 public final class GitWorkbenchStore {
-    public private(set) var state: WorkbenchState
+    // MARK: Granular UI state
+    //
+    // Each field is its own @Observable-tracked stored property, so a view that reads
+    // only `commits` is untouched by a commit-message keystroke or a toast. `state`
+    // (below) recomposes the full WorkbenchState snapshot for tests, demos, and
+    // headless hosts — reading it observes *everything*, so views use the fields.
+
+    public private(set) var activeView: WorkspaceView
+    public var diffMode: DiffMode { didSet { saveDiffMode(diffMode) } }
+    public private(set) var repo: RepositoryStatus
+    public private(set) var branches: [Branch] = []
+    public private(set) var remoteBranches: [RemoteBranch] = []
+    public private(set) var selectedFileID: FileChange.ID?
+    public var commitMessage: String = ""
+    public private(set) var pendingDiscard: FileChange?
+    public private(set) var commits: [Commit] = []
+    public private(set) var selectedCommitID: Commit.ID?
+    public private(set) var selectedCommitFileID: FileChange.ID?
+    public private(set) var pendingRefCreation: PendingRefCreation?
+    public private(set) var pendingHardReset: Commit?
+    public private(set) var historyBranch: String?
+    public private(set) var isLoadingHistory = false
+    public private(set) var stashes: [Stash] = []
+    public private(set) var selectedStashID: Stash.ID?
+    public private(set) var selectedStashFileID: FileChange.ID?
+    public private(set) var currentDiff: FileDiff?
+    /// True while a diff load for the current selection is in flight (drives the
+    /// panes' loading spinner). Mirrors `isLoadingHistory`. Not part of the
+    /// `state` snapshot — like `hasLoaded`, it is transient store-side state.
+    public private(set) var isLoadingDiff = false
+    /// True when the most recent diff load completed with no diff (provider threw).
+    /// Distinguishes a real failure from a stale `currentDiff` (e.g. after a tab
+    /// switch), so the panes' "Couldn't load diff" state never lies. Shares
+    /// `currentDiff`'s single-slot semantics; resets when any new load starts.
+    public private(set) var didFailDiffLoad = false
+    public private(set) var isBusy = false
+    public private(set) var toast: Toast?
+
+    // MARK: Derived (same definitions WorkbenchState carries for snapshot consumers)
+
+    public var staged: [FileChange] { repo.files.filter(\.isStaged) }
+    public var unstaged: [FileChange] { repo.files.filter { !$0.isStaged } }
+    public var canCommit: Bool {
+        !staged.isEmpty &&
+        !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    public var isBrowsingOtherBranch: Bool {
+        guard let historyBranch else { return false }
+        return historyBranch != repo.currentBranch
+    }
+
+    /// Bindable façade over the pending-ref name (TextField binding in NewRefPopover).
+    public var pendingRefName: String {
+        get { pendingRefCreation?.name ?? "" }
+        set { pendingRefCreation?.name = newValue }
+    }
+
+    // MARK: Compatibility snapshot
+
+    /// The full UI state recomposed as a value. Kept for tests, demos, and hosts that
+    /// want one Sendable snapshot. Reading this in a SwiftUI body observes every field —
+    /// views should read the individual properties instead.
+    public var state: WorkbenchState {
+        var s = WorkbenchState(repo: repo)
+        s.activeView = activeView; s.diffMode = diffMode
+        s.branches = branches; s.remoteBranches = remoteBranches
+        s.selectedFileID = selectedFileID; s.commitMessage = commitMessage
+        s.pendingDiscard = pendingDiscard
+        s.commits = commits; s.selectedCommitID = selectedCommitID
+        s.selectedCommitFileID = selectedCommitFileID
+        s.pendingRefCreation = pendingRefCreation; s.pendingHardReset = pendingHardReset
+        s.historyBranch = historyBranch; s.isLoadingHistory = isLoadingHistory
+        s.stashes = stashes; s.selectedStashID = selectedStashID
+        s.selectedStashFileID = selectedStashFileID
+        s.currentDiff = currentDiff
+        s.isBusy = isBusy; s.toast = toast
+        return s
+    }
+
+    /// Seed every field from a snapshot (previews, demos, tests).
+    func apply(_ snapshot: WorkbenchState) {
+        activeView = snapshot.activeView; diffMode = snapshot.diffMode
+        repo = snapshot.repo; branches = snapshot.branches; remoteBranches = snapshot.remoteBranches
+        selectedFileID = snapshot.selectedFileID; commitMessage = snapshot.commitMessage
+        pendingDiscard = snapshot.pendingDiscard
+        commits = snapshot.commits; selectedCommitID = snapshot.selectedCommitID
+        selectedCommitFileID = snapshot.selectedCommitFileID
+        pendingRefCreation = snapshot.pendingRefCreation; pendingHardReset = snapshot.pendingHardReset
+        historyBranch = snapshot.historyBranch; isLoadingHistory = snapshot.isLoadingHistory
+        stashes = snapshot.stashes; selectedStashID = snapshot.selectedStashID
+        selectedStashFileID = snapshot.selectedStashFileID
+        currentDiff = snapshot.currentDiff
+        isBusy = snapshot.isBusy; toast = snapshot.toast
+    }
+
     /// A host can recolor at runtime (see `setTheme`); other fields are set once at init.
     public private(set) var configuration: WorkbenchConfiguration
 
@@ -57,16 +151,14 @@ public final class GitWorkbenchStore {
     public init(provider: any GitWorkbenchProvider, configuration: WorkbenchConfiguration = .init()) {
         self.provider = provider
         self.configuration = configuration
-        let emptyRepo = RepositoryStatus(
+        repo = RepositoryStatus(
             repositoryName: "", currentBranch: "", upstream: nil,
             ahead: 0, behind: 0, files: [], author: Author(name: "", initials: "")
         )
-        var initial = WorkbenchState(repo: emptyRepo)
-        initial.activeView = configuration.initialView
+        activeView = configuration.initialView
         // Restore the saved diff presentation (same host store as column widths), falling
         // back to the configured default when nothing is persisted.
-        initial.diffMode = Self.loadDiffMode(configuration) ?? configuration.defaultDiffMode
-        state = initial
+        diffMode = Self.loadDiffMode(configuration) ?? configuration.defaultDiffMode
     }
 
     // MARK: Diff-mode persistence
@@ -131,10 +223,10 @@ public final class GitWorkbenchStore {
             async let remoteBranches = provider.loadRemoteBranches()
             async let stashes = provider.loadStashes()
             let (s, b, rb, st) = try await (status, branches, remoteBranches, stashes)
-            state.repo = s
-            state.branches = b
-            state.remoteBranches = rb
-            state.stashes = st
+            repo = s
+            self.branches = b
+            self.remoteBranches = rb
+            self.stashes = st
             hasLoaded = true
         } catch {
             setError(error)
@@ -155,7 +247,7 @@ public final class GitWorkbenchStore {
     /// updates live as the working tree changes — the headless equivalent of the
     /// `onRepositorySummaryChange(_:)` view modifier.
     public var summary: RepositorySummary? {
-        hasLoaded ? RepositorySummary(state: state) : nil
+        hasLoaded ? RepositorySummary(repo, isBusy: isBusy) : nil
     }
 
     /// Subscribe to the provider's repository-change stream (if it offers one) so external
@@ -175,7 +267,7 @@ public final class GitWorkbenchStore {
     /// and stash diffs are immutable, so only the Changes selection can go stale.)
     private func reloadFromExternalChange() async {
         await reload()
-        if state.activeView == .changes, let id = state.selectedFileID {
+        if activeView == .changes, let id = selectedFileID {
             select(file: id)
         }
     }
@@ -185,11 +277,11 @@ public final class GitWorkbenchStore {
     /// background reload can't get stuck erroring.
     private func reloadHistory() async {
         do {
-            state.commits = try await provider.loadHistory(of: state.historyBranch, before: nil, limit: 50)
+            commits = try await provider.loadHistory(of: historyBranch, before: nil, limit: 50)
         } catch {
-            guard state.historyBranch != nil else { setError(error); return }
-            state.historyBranch = nil
-            state.commits = (try? await provider.loadHistory(of: nil, before: nil, limit: 50)) ?? []
+            guard historyBranch != nil else { setError(error); return }
+            historyBranch = nil
+            commits = (try? await provider.loadHistory(of: nil, before: nil, limit: 50)) ?? []
         }
     }
 
@@ -206,34 +298,33 @@ public final class GitWorkbenchStore {
     }
 
     private func showHistory(ofRef ref: String) async {
-        state.activeView = .history
-        state.historyBranch = ref
-        state.isLoadingHistory = true
+        activeView = .history
+        historyBranch = ref
+        isLoadingHistory = true
         do {
-            state.commits = try await provider.loadHistory(of: ref, before: nil, limit: 50)
-            state.isLoadingHistory = false
-            if let first = state.commits.first {
+            commits = try await provider.loadHistory(of: ref, before: nil, limit: 50)
+            isLoadingHistory = false
+            if let first = commits.first {
                 await selectCommit(first.id)
             } else {
-                state.selectedCommitID = nil
-                state.selectedCommitFileID = nil
-                state.currentDiff = nil
+                selectedCommitID = nil
+                selectedCommitFileID = nil
+                currentDiff = nil
+                isLoadingDiff = false
+                didFailDiffLoad = false
             }
         } catch {
-            state.isLoadingHistory = false
+            isLoadingHistory = false
             setError(error)
         }
     }
 
     // MARK: Selection (synchronous intents)
 
-    public func select(_ view: WorkspaceView) { state.activeView = view }
-    public func setDiffMode(_ mode: DiffMode) {
-        state.diffMode = mode
-        saveDiffMode(mode)
-    }
+    public func select(_ view: WorkspaceView) { activeView = view }
+    public func setDiffMode(_ mode: DiffMode) { diffMode = mode }
 
-    public func setCommitMessage(_ text: String) { state.commitMessage = text }
+    public func setCommitMessage(_ text: String) { commitMessage = text }
 
     /// Swap the light + dark color themes at runtime (recolors immediately, no reload).
     public func setTheme(light: WorkbenchTheme, dark: WorkbenchTheme) {
@@ -242,12 +333,16 @@ public final class GitWorkbenchStore {
     }
 
     public func select(file id: FileChange.ID) {
-        state.selectedFileID = id
-        guard let file = state.repo.files.first(where: { $0.id == id }) else {
-            state.currentDiff = nil
+        selectedFileID = id
+        guard let file = repo.files.first(where: { $0.id == id }) else {
+            currentDiff = nil
+            isLoadingDiff = false
+            didFailDiffLoad = false
             return
         }
         let context: DiffRequest.Context = .workingTree(staged: file.isStaged)
+        isLoadingDiff = true
+        didFailDiffLoad = false
         diffTask?.cancel()
         diffTask = Task { [weak self] in
             await self?.loadDiff(for: file, context: context)
@@ -258,15 +353,19 @@ public final class GitWorkbenchStore {
 
     /// Loads a diff for `file` in `context` and stores it (nil on failure — the pane shows empty).
     func loadDiff(for file: FileChange, context: DiffRequest.Context) async {
-        let request = DiffRequest(file: file, context: context, mode: state.diffMode)
+        let request = DiffRequest(file: file, context: context, mode: diffMode)
         let diff = try? await provider.loadDiff(request)
-        if !Task.isCancelled { state.currentDiff = diff }
+        if !Task.isCancelled {
+            currentDiff = diff
+            isLoadingDiff = false
+            didFailDiffLoad = (diff == nil)
+        }
     }
 
     /// Maps an error to a toast message and shows it.
     func setError(_ error: Error) {
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        state.toast = .error(message)
+        toast = .error(message)
     }
 
     // MARK: Convenience
@@ -279,7 +378,7 @@ public final class GitWorkbenchStore {
             seeded.selectedFileID = first.id
             seeded.currentDiff = FixtureDiffs.diff(for: first, context: .workingTree(staged: first.isStaged))
         }
-        store.state = seeded
+        store.apply(seeded)
         return store
     }
 }
@@ -288,79 +387,85 @@ public final class GitWorkbenchStore {
 
 public extension GitWorkbenchStore {
     func toggleStage(_ id: FileChange.ID) async {
-        guard let idx = state.repo.files.firstIndex(where: { $0.id == id }) else { return }
-        let original = state.repo.files[idx]
+        guard let idx = repo.files.firstIndex(where: { $0.id == id }) else { return }
+        let original = repo.files[idx]
         let nowStaged = !original.isStaged
-        state.repo.files[idx].isStaged = nowStaged // optimistic
+        repo.files[idx].isStaged = nowStaged // optimistic
         do {
             if nowStaged { try await provider.stage([original]) }
             else { try await provider.unstage([original]) }
         } catch {
-            if let i = state.repo.files.firstIndex(where: { $0.id == id }) {
-                state.repo.files[i].isStaged = original.isStaged // rollback
+            if let i = repo.files.firstIndex(where: { $0.id == id }) {
+                repo.files[i].isStaged = original.isStaged // rollback
             }
             setError(error)
         }
     }
 
     func stageAll() async {
-        let targets = state.unstaged
+        let targets = unstaged
         guard !targets.isEmpty else { return }
-        let snapshot = state.repo.files
-        for i in state.repo.files.indices {
-            state.repo.files[i].isStaged = true
+        let snapshot = repo.files
+        for i in repo.files.indices {
+            repo.files[i].isStaged = true
         }
         do { try await provider.stage(targets) }
-        catch { state.repo.files = snapshot; setError(error) }
+        catch { repo.files = snapshot; setError(error) }
     }
 
     func unstageAll() async {
-        let targets = state.staged
+        let targets = staged
         guard !targets.isEmpty else { return }
-        let snapshot = state.repo.files
-        for i in state.repo.files.indices {
-            state.repo.files[i].isStaged = false
+        let snapshot = repo.files
+        for i in repo.files.indices {
+            repo.files[i].isStaged = false
         }
         do { try await provider.unstage(targets) }
-        catch { state.repo.files = snapshot; setError(error) }
+        catch { repo.files = snapshot; setError(error) }
     }
 
     func requestDiscard(_ id: FileChange.ID) {
-        state.pendingDiscard = state.repo.files.first { $0.id == id }
+        pendingDiscard = repo.files.first { $0.id == id }
     }
 
-    func cancelDiscard() { state.pendingDiscard = nil }
+    func cancelDiscard() { pendingDiscard = nil }
 
     func confirmDiscard() async {
-        guard let file = state.pendingDiscard else { return }
-        state.pendingDiscard = nil
+        guard let file = pendingDiscard else { return }
+        pendingDiscard = nil
         do {
             try await provider.discard(file)
-            state.repo.files.removeAll { $0.id == file.id }
-            if state.selectedFileID == file.id {
-                state.selectedFileID = nil
-                state.currentDiff = nil
+            repo.files.removeAll { $0.id == file.id }
+            if selectedFileID == file.id {
+                selectedFileID = nil
+                currentDiff = nil
+                diffTask?.cancel()
+                isLoadingDiff = false
+                didFailDiffLoad = false
             }
-            state.toast = .success("Discarded changes in \(file.name)")
+            toast = .success("Discarded changes in \(file.name)")
         } catch {
             setError(error)
         }
     }
 
     func commit() async {
-        guard state.canCommit else { return }
-        let staged = state.staged
-        let message = state.commitMessage
+        guard canCommit else { return }
+        let staged = staged
+        let message = commitMessage
         do {
             let newCommit = try await provider.commit(message: message, staged: staged)
-            state.repo.files.removeAll { $0.isStaged }
-            state.commitMessage = ""
-            state.repo.ahead += 1
+            repo.files.removeAll { $0.isStaged }
+            commitMessage = ""
+            repo.ahead += 1
             syncCurrentBranchDivergence()
-            state.commits.insert(newCommit, at: 0)
-            state.selectedFileID = nil
-            state.currentDiff = nil
-            state.toast = .success("Committed \(staged.count) file(s) \u{00B7} \u{201C}\(newCommit.summary)\u{201D}")
+            commits.insert(newCommit, at: 0)
+            selectedFileID = nil
+            currentDiff = nil
+            diffTask?.cancel()
+            isLoadingDiff = false
+            didFailDiffLoad = false
+            toast = .success("Committed \(staged.count) file(s) \u{00B7} \u{201C}\(newCommit.summary)\u{201D}")
         } catch {
             setError(error)
         }
@@ -377,12 +482,12 @@ public extension GitWorkbenchStore {
     private enum SyncKind { case pull, push, fetch }
 
     private func runSync(_ kind: SyncKind) async {
-        guard !state.isBusy else { return }
-        state.isBusy = true
+        guard !isBusy else { return }
+        isBusy = true
         switch kind {
-        case .pull: state.toast = .progress("Pulling from origin\u{2026}")
-        case .push: state.toast = .progress("Pushing to origin\u{2026}")
-        case .fetch: state.toast = .progress("Fetching from origin\u{2026}")
+        case .pull: toast = .progress("Pulling from origin\u{2026}")
+        case .push: toast = .progress("Pushing to origin\u{2026}")
+        case .fetch: toast = .progress("Fetching from origin\u{2026}")
         }
         do {
             let result: SyncResult
@@ -391,33 +496,33 @@ public extension GitWorkbenchStore {
             case .push: result = try await provider.push()
             case .fetch: result = try await provider.fetch()
             }
-            state.repo.ahead = result.ahead
-            state.repo.behind = result.behind
+            repo.ahead = result.ahead
+            repo.behind = result.behind
             syncCurrentBranchDivergence()
             // A pull moves HEAD forward with the fetched commits, so the History view's
             // commit list is now stale — refresh it.
             if kind == .pull { await reloadHistory() }
-            state.isBusy = false
-            state.toast = .success(result.message)
+            isBusy = false
+            toast = .success(result.message)
         } catch {
-            state.isBusy = false
+            isBusy = false
             setError(mapSyncError(error, kind: kind))
         }
     }
 
-    /// Mirror the current branch's ahead/behind onto its entry in `state.branches`, so the rail row
+    /// Mirror the current branch's ahead/behind onto its entry in `branches`, so the rail row
     /// stays in step with the toolbar Pull/Push badges after an optimistic commit/pull/push (both read
-    /// these counts, from different fields). A later reload refreshes `state.branches` from
+    /// these counts, from different fields). A later reload refreshes `branches` from
     /// `for-each-ref`; this keeps the two consistent in the window before that — and in the mock, which
     /// has no filesystem watcher to trigger one.
     private func syncCurrentBranchDivergence() {
-        // Only mirror when the branch has an upstream: `commit()` bumps `state.repo.ahead` even on an
+        // Only mirror when the branch has an upstream: `commit()` bumps `repo.ahead` even on an
         // upstream-less branch, and writing that here would render a bogus `↑` badge (`AheadBehindBadge`
         // shows nothing without an upstream). CLI hosts self-heal on the next reload; the mock does not.
-        guard let idx = state.branches.firstIndex(where: { $0.name == state.repo.currentBranch }),
-              state.branches[idx].upstream != nil else { return }
-        state.branches[idx].ahead = state.repo.ahead
-        state.branches[idx].behind = state.repo.behind
+        guard let idx = branches.firstIndex(where: { $0.name == repo.currentBranch }),
+              branches[idx].upstream != nil else { return }
+        branches[idx].ahead = repo.ahead
+        branches[idx].behind = repo.behind
     }
 
     private func mapSyncError(_ error: Error, kind: SyncKind) -> Error {
@@ -432,9 +537,9 @@ public extension GitWorkbenchStore {
     func switchBranch(to branch: Branch) async {
         do {
             try await provider.switchBranch(to: branch)
-            state.historyBranch = nil // history follows the new current branch
+            historyBranch = nil // history follows the new current branch
             await reload()
-            state.toast = .success("Switched to \(branch.name)")
+            toast = .success("Switched to \(branch.name)")
         } catch {
             setError(error)
         }
@@ -445,9 +550,9 @@ public extension GitWorkbenchStore {
     func checkoutRemoteBranch(_ branch: RemoteBranch) async {
         do {
             try await provider.checkoutRemoteBranch(branch)
-            state.historyBranch = nil // history follows the new current branch
+            historyBranch = nil // history follows the new current branch
             await reload()
-            state.toast = .success("Checked out \(branch.name)")
+            toast = .success("Checked out \(branch.name)")
         } catch {
             setError(error)
         }
@@ -464,32 +569,36 @@ struct WorkbenchMessageError: LocalizedError {
 // MARK: - Chrome intents
 
 public extension GitWorkbenchStore {
-    func dismissToast() { state.toast = nil }
+    func dismissToast() { toast = nil }
 }
 
 // MARK: - Detail-pane intents
 
 public extension GitWorkbenchStore {
     func selectCommitFile(_ fileID: FileChange.ID) {
-        state.selectedCommitFileID = fileID
-        guard let commitID = state.selectedCommitID,
-              let file = state.commits.first(where: { $0.id == commitID })?.files.first(where: { $0.id == fileID })
+        selectedCommitFileID = fileID
+        guard let commitID = selectedCommitID,
+              let file = commits.first(where: { $0.id == commitID })?.files.first(where: { $0.id == fileID })
         else { return }
+        isLoadingDiff = true
+        didFailDiffLoad = false
         diffTask?.cancel()
         diffTask = Task { [weak self] in await self?.loadDiff(for: file, context: .commit(commitID)) }
     }
 
     func selectStashFile(_ fileID: FileChange.ID) {
-        state.selectedStashFileID = fileID
-        guard let stashID = state.selectedStashID,
-              let file = state.stashes.first(where: { $0.id == stashID })?.files.first(where: { $0.id == fileID })
+        selectedStashFileID = fileID
+        guard let stashID = selectedStashID,
+              let file = stashes.first(where: { $0.id == stashID })?.files.first(where: { $0.id == fileID })
         else { return }
+        isLoadingDiff = true
+        didFailDiffLoad = false
         diffTask?.cancel()
         diffTask = Task { [weak self] in await self?.loadDiff(for: file, context: .stash(stashID)) }
     }
 
     func showToast(_ message: String, style: Toast.Style = .success) {
-        state.toast = Toast(message: message, style: style)
+        toast = Toast(message: message, style: style)
     }
 }
 
@@ -497,54 +606,68 @@ public extension GitWorkbenchStore {
 
 public extension GitWorkbenchStore {
     func selectCommit(_ id: Commit.ID) async {
-        state.selectedCommitID = id
-        guard let commit = state.commits.first(where: { $0.id == id }) else { return }
-        state.selectedCommitFileID = commit.files.first?.id
+        selectedCommitID = id
+        guard let commit = commits.first(where: { $0.id == id }) else { return }
+        selectedCommitFileID = commit.files.first?.id
         if let first = commit.files.first {
-            await loadDiff(for: first, context: .commit(id))
+            isLoadingDiff = true
+            didFailDiffLoad = false
+            diffTask?.cancel()
+            let task: Task<Void, Never> = Task { [weak self] in await self?.loadDiff(for: first, context: .commit(id)) }
+            diffTask = task
+            await task.value
         } else {
-            state.currentDiff = nil
+            currentDiff = nil
+            isLoadingDiff = false
+            didFailDiffLoad = false
         }
     }
 
     func selectStash(_ id: Stash.ID) async {
-        state.selectedStashID = id
-        guard let stash = state.stashes.first(where: { $0.id == id }) else { return }
-        state.selectedStashFileID = stash.files.first?.id
+        selectedStashID = id
+        guard let stash = stashes.first(where: { $0.id == id }) else { return }
+        selectedStashFileID = stash.files.first?.id
         if let first = stash.files.first {
-            await loadDiff(for: first, context: .stash(id))
+            isLoadingDiff = true
+            didFailDiffLoad = false
+            diffTask?.cancel()
+            let task: Task<Void, Never> = Task { [weak self] in await self?.loadDiff(for: first, context: .stash(id)) }
+            diffTask = task
+            await task.value
         } else {
-            state.currentDiff = nil
+            currentDiff = nil
+            isLoadingDiff = false
+            didFailDiffLoad = false
         }
     }
 
     func applyStash(_ id: Stash.ID) async {
-        guard let stash = state.stashes.first(where: { $0.id == id }) else { return }
+        guard let stash = stashes.first(where: { $0.id == id }) else { return }
         do {
             try await provider.applyStash(stash)
-            state.toast = .success("Applied \(stash.ref) to working tree")
+            toast = .success("Applied \(stash.ref) to working tree")
         } catch {
             setError(error)
         }
     }
 
     func popStash(_ id: Stash.ID) async {
-        guard let stash = state.stashes.first(where: { $0.id == id }) else { return }
+        guard let stash = stashes.first(where: { $0.id == id }) else { return }
         do {
             try await provider.popStash(stash)
             removeStashAndReselect(id)
-            state.toast = .success("Popped \(stash.ref) \u{2014} \u{201C}\(stash.message)\u{201D}")
+            toast = .success("Popped \(stash.ref) \u{2014} \u{201C}\(stash.message)\u{201D}")
         } catch {
             setError(error)
         }
     }
 
     func dropStash(_ id: Stash.ID) async {
-        guard let stash = state.stashes.first(where: { $0.id == id }) else { return }
+        guard let stash = stashes.first(where: { $0.id == id }) else { return }
         do {
             try await provider.dropStash(stash)
             removeStashAndReselect(id)
-            state.toast = .success("Dropped \(stash.ref) \u{2014} \u{201C}\(stash.message)\u{201D}")
+            toast = .success("Dropped \(stash.ref) \u{2014} \u{201C}\(stash.message)\u{201D}")
         } catch {
             setError(error)
         }
@@ -556,9 +679,9 @@ public extension GitWorkbenchStore {
     func checkout(_ commit: Commit) async {
         do {
             try await provider.checkout(commit)
-            state.historyBranch = nil
+            historyBranch = nil
             await reload()
-            state.toast = .success("Checked out \(commit.shortSHA)")
+            toast = .success("Checked out \(commit.shortSHA)")
         } catch {
             setError(error)
         }
@@ -568,7 +691,7 @@ public extension GitWorkbenchStore {
         do {
             try await provider.resetHEAD(to: commit, mode: mode)
             await reload()
-            state.toast = .success("Reset HEAD to \(commit.shortSHA) (\(mode.rawValue))")
+            toast = .success("Reset HEAD to \(commit.shortSHA) (\(mode.rawValue))")
         } catch {
             setError(error)
         }
@@ -578,7 +701,7 @@ public extension GitWorkbenchStore {
         do {
             try await provider.revert(commit)
             await reload()
-            state.toast = .success("Reverted \(commit.shortSHA)")
+            toast = .success("Reverted \(commit.shortSHA)")
         } catch {
             setError(error)
         }
@@ -588,7 +711,7 @@ public extension GitWorkbenchStore {
         do {
             try await provider.cherryPick(commit)
             await reload()
-            state.toast = .success("Cherry-picked \(commit.shortSHA)")
+            toast = .success("Cherry-picked \(commit.shortSHA)")
         } catch {
             setError(error)
         }
@@ -598,37 +721,37 @@ public extension GitWorkbenchStore {
 
     /// The destructive "Hard \u{2014} discard all changes" menu item routes here so the irreversible
     /// reset is confirmed before it throws away uncommitted work. Soft/mixed resets skip this.
-    func requestHardReset(at commit: Commit) { state.pendingHardReset = commit }
-    func cancelHardReset() { state.pendingHardReset = nil }
+    func requestHardReset(at commit: Commit) { pendingHardReset = commit }
+    func cancelHardReset() { pendingHardReset = nil }
 
     func confirmHardReset() async {
-        guard let commit = state.pendingHardReset else { return }
-        state.pendingHardReset = nil
+        guard let commit = pendingHardReset else { return }
+        pendingHardReset = nil
         await resetHEAD(to: commit, mode: .hard)
     }
 
     // MARK: New-branch / new-tag input flow (mirrors the discard confirm popover)
 
-    func requestCreateBranch(at commit: Commit) { state.pendingRefCreation = .init(kind: .branch, commit: commit) }
-    func requestCreateTag(at commit: Commit) { state.pendingRefCreation = .init(kind: .tag, commit: commit) }
-    func setPendingRefName(_ name: String) { state.pendingRefCreation?.name = name }
-    func cancelRefCreation() { state.pendingRefCreation = nil }
+    func requestCreateBranch(at commit: Commit) { pendingRefCreation = .init(kind: .branch, commit: commit) }
+    func requestCreateTag(at commit: Commit) { pendingRefCreation = .init(kind: .tag, commit: commit) }
+    func setPendingRefName(_ name: String) { pendingRefCreation?.name = name }
+    func cancelRefCreation() { pendingRefCreation = nil }
 
     func confirmRefCreation() async {
-        guard let pending = state.pendingRefCreation else { return }
+        guard let pending = pendingRefCreation else { return }
         let name = pending.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
-        state.pendingRefCreation = nil
+        pendingRefCreation = nil
         do {
             switch pending.kind {
             case .branch:
                 try await provider.createBranch(named: name, at: pending.commit)
                 await reload()
-                state.toast = .success("Created branch \(name)")
+                toast = .success("Created branch \(name)")
             case .tag:
                 try await provider.createTag(named: name, at: pending.commit)
                 await reload()
-                state.toast = .success("Created tag \(name)")
+                toast = .success("Created tag \(name)")
             }
         } catch {
             setError(error)
@@ -636,25 +759,31 @@ public extension GitWorkbenchStore {
     }
 
     private func removeStashAndReselect(_ id: Stash.ID) {
-        guard let idx = state.stashes.firstIndex(where: { $0.id == id }) else { return }
-        state.stashes.remove(at: idx)
-        guard !state.stashes.isEmpty else {
-            state.selectedStashID = nil
-            state.selectedStashFileID = nil
-            state.currentDiff = nil
+        guard let idx = stashes.firstIndex(where: { $0.id == id }) else { return }
+        stashes.remove(at: idx)
+        guard !stashes.isEmpty else {
+            selectedStashID = nil
+            selectedStashFileID = nil
+            currentDiff = nil
+            isLoadingDiff = false
+            didFailDiffLoad = false
             return
         }
-        let nextIdx = min(idx, state.stashes.count - 1)
-        let next = state.stashes[nextIdx]
-        state.selectedStashID = next.id
-        state.selectedStashFileID = next.files.first?.id
+        let nextIdx = min(idx, stashes.count - 1)
+        let next = stashes[nextIdx]
+        selectedStashID = next.id
+        selectedStashFileID = next.files.first?.id
         if let first = next.files.first {
+            isLoadingDiff = true
+            didFailDiffLoad = false
             diffTask?.cancel()
             diffTask = Task { [weak self] in
                 await self?.loadDiff(for: first, context: .stash(next.id))
             }
         } else {
-            state.currentDiff = nil
+            currentDiff = nil
+            isLoadingDiff = false
+            didFailDiffLoad = false
         }
     }
 }
