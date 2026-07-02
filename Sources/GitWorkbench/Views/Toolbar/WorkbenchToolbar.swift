@@ -30,8 +30,8 @@ struct WorkbenchToolbar: View {
             Spacer(minLength: 0)
 
             Segmented(value: $store.diffMode, options: [
-                .init(value: .unified, icon: IconLibrary.unifiedRows),
-                .init(value: .split, icon: IconLibrary.splitColumns),
+                .init(value: .unified, icon: IconLibrary.unifiedRows, accessibilityLabel: "Unified diff"),
+                .init(value: .split, icon: IconLibrary.splitColumns, accessibilityLabel: "Split diff"),
             ])
             .padding(.trailing, 14)
         }

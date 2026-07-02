@@ -5,6 +5,8 @@ struct SegmentedOption<Value: Hashable>: Identifiable {
     var value: Value
     var icon: String? = nil
     var label: String? = nil
+    /// Spoken label for icon-only segments (falls back to `label`).
+    var accessibilityLabel: String? = nil
     var id: Value { value }
 }
 
@@ -41,11 +43,14 @@ struct Segmented<Value: Hashable>: View {
                     .contentShape(Rectangle())   // whole segment is tappable, not just the icon
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(option.accessibilityLabel ?? option.label ?? "")
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             }
         }
         .padding(2)
         .background(theme.neutralFill(0.06),
                     in: RoundedRectangle(cornerRadius: Tokens.segmentOuterRadius, style: .continuous))
+        .accessibilityElement(children: .contain)
     }
 }
 

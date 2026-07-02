@@ -137,8 +137,8 @@ struct ModifiedImageComparer: View {
             switch mode {
             case .swipe:
                 Segmented(value: $axis, options: [
-                    .init(value: .vertical, icon: IconLibrary.axisVertical),
-                    .init(value: .horizontal, icon: IconLibrary.axisHorizontal),
+                    .init(value: .vertical, icon: IconLibrary.axisVertical, accessibilityLabel: "Vertical divider"),
+                    .init(value: .horizontal, icon: IconLibrary.axisHorizontal, accessibilityLabel: "Horizontal divider"),
                 ])
             case .fade:
                 fadeSlider
