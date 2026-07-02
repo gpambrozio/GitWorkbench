@@ -22,6 +22,14 @@ enum DiffMetrics {
     }
 }
 
+/// One hunk paired with its derived split rows, computed once per diff (not per body
+/// pass — body re-runs on every horizontal scroll tick via `hOffset`).
+private struct HunkRows: Identifiable {
+    let hunk: DiffHunk
+    let rows: [SplitRow]
+    var id: DiffHunk.ID { hunk.id }
+}
+
 /// The split diff: two half-width panes with the divider pinned at the centre. Gutters, signs and the
 /// `@@` header bands stay fixed; only the code columns scroll horizontally, in lock-step across both
 /// sides (VSCode-style). Vertical scrolling is shared by the single outer `ScrollView`; horizontal
@@ -29,11 +37,20 @@ enum DiffMetrics {
 struct SplitDiffBody: View {
     @Environment(\.workbenchTheme) private var theme
     let diff: FileDiff
+    private let maxCode: CGFloat
+    private let hunkRows: [HunkRows]
     @State private var hOffset: CGFloat = 0
 
+    init(diff: FileDiff) {
+        self.diff = diff
+        // Derived once per diff: init runs only when DiffView's body executes (file /
+        // mode / theme change), while body runs on every scroll tick.
+        self.maxCode = DiffMetrics.maxCodeWidth(diff)
+        self.hunkRows = diff.hunks.map { HunkRows(hunk: $0, rows: DiffSplitter.rows($0.lines)) }
+    }
+
     var body: some View {
-        let maxCode = DiffMetrics.maxCodeWidth(diff)
-        return GeometryReader { geo in
+        GeometryReader { geo in
             let paneWidth = geo.size.width / 2
             let codeWidth = DiffMetrics.splitCodeWidth(paneWidth: paneWidth)
             let maxOffset = max(0, maxCode + DiffMetrics.splitCodeInset - codeWidth)
@@ -43,9 +60,9 @@ struct SplitDiffBody: View {
             VStack(spacing: 0) {
                 ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(diff.hunks) { hunk in
-                            HunkHeaderBand(text: hunk.header)
-                            ForEach(DiffSplitter.rows(hunk.lines)) { row in
+                        ForEach(hunkRows) { entry in
+                            HunkHeaderBand(text: entry.hunk.header)
+                            ForEach(entry.rows) { row in
                                 SplitDiffRow(row: row, paneWidth: paneWidth, codeWidth: codeWidth, codeOffset: offset)
                             }
                         }
