@@ -57,17 +57,17 @@ struct FileListRow: View {
             Spacer(minLength: 6)
             // Stats / discard get top priority and a fixed size so they stay visible as the column
             // narrows — the name (priority 1) and path (priority 0) truncate instead.
-            trailing(selected: selected)
+            trailing()
                 .fixedSize(horizontal: true, vertical: false)
                 .layoutPriority(2)
         }
         .padding(.horizontal, 12)
         .frame(height: Tokens.changesRowHeight)
         .frame(maxWidth: .infinity)
-        .background(rowBackground(selected: selected))
+        .background(rowBackground())
     }
 
-    @ViewBuilder private func trailing(selected: Bool) -> some View {
+    @ViewBuilder private func trailing() -> some View {
         if hover {
             Button { store.requestDiscard(file.id) } label: {
                 Image(systemName: IconLibrary.discard)
@@ -98,7 +98,7 @@ struct FileListRow: View {
         }
     }
 
-    private func rowBackground(selected: Bool) -> Color {
+    private func rowBackground() -> Color {
         if selected { return theme.accent }
         if hover { return theme.neutralFill(0.04) }
         return .clear

@@ -34,10 +34,14 @@ public struct GitWorkbenchView: View {
         .background(theme.winBg)
         .foregroundStyle(theme.ink)
         .workbenchTheme(theme)
-        // A host can swap stores at the same view identity (e.g. LiveDemo's Open…);
-        // @State layout would keep the first store's seeds. Re-identify on the
-        // persistence key so a different embedding context re-seeds its layout.
+        // Resets descendant state (e.g. WorkspaceRail's) when a host swaps stores at the same
+        // view identity (e.g. LiveDemo's Open…) with a different persistence key. A self-applied
+        // `.id` doesn't reset this view's own @State — see the `layout` re-seed below for that.
         .id(configuration.persistenceKey)
+        // Self-applied `.id` above can't reset this view's own @State layout, so re-seed it
+        // explicitly when a host swaps stores with a different persistence key, so drags persist
+        // under the new key.
+        .onChange(of: store.configuration.persistenceKey) { layout = ColumnLayout(configuration: store.configuration) }
         .overlay(alignment: .bottom) { toastOverlay }
         // Drive the host observer off `store.summary` so it fires only once a load has
         // completed — never with the pre-load placeholder — matching the headless
