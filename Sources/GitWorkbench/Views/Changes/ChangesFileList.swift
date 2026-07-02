@@ -54,6 +54,7 @@ struct ChangesFileList: View {
                     Image(systemName: collapsed.wrappedValue ? IconLibrary.chevronRight : IconLibrary.chevronDown)
                         .font(.system(size: 10)).foregroundStyle(theme.ink3)
                 }.buttonStyle(.plain)
+                .accessibilityLabel(collapsed.wrappedValue ? "Expand \(title)" : "Collapse \(title)")
                 Text(title.uppercased()).font(.system(size: 11, weight: .bold)).tracking(0.4).foregroundStyle(theme.ink3)
                 Text("\(count)").font(.system(size: 11, weight: .semibold).monospacedDigit())
                     .foregroundStyle(theme.ink3)
