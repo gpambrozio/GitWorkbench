@@ -7,9 +7,10 @@ import CoreGraphics
 /// keep the result sane regardless of the message length, the persisted preference, or the pane size —
 /// and are unit-tested, unlike the SwiftUI wiring in `CommitDetail`.
 enum MessageResize {
-    /// Minimum message height — roughly two lines (summary + one body line + top padding), so the
-    /// message never collapses to nothing.
-    static let minHeight: CGFloat = 52
+    /// Minimum message height — enough to fully show two lines without clipping: the 16pt top padding
+    /// + the summary line (16pt) + the body's 8pt top padding + one body line (12.5pt), plus a little
+    /// breathing room. Below this the message can't shrink (unless its content is even shorter).
+    static let minHeight: CGFloat = 66
     /// The diff area never drops below this, so shrinking… er, *growing* the message can't hide the diff
     /// (and a very long commit body can't push the diff off-screen).
     static let minDiffHeight: CGFloat = 120
