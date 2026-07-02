@@ -101,7 +101,8 @@ struct WorkspaceRail: View {
         let isCurrent = branch.name == s.repo.currentBranch
         return RailItem(icon: IconLibrary.branch, title: displayName, count: nil,
                         selected: s.activeView == .history && branch.name == (s.historyBranch ?? s.repo.currentBranch),
-                        emphasized: isCurrent, badge: isCurrent ? "HEAD" : nil, indent: indent,
+                        emphasized: isCurrent, badge: isCurrent ? "HEAD" : nil,
+                        ahead: branch.ahead, behind: branch.behind, indent: indent,
                         doubleAction: { Task { await store.switchBranch(to: branch) } })
         {
             Task { await store.showHistory(of: branch) }
@@ -263,6 +264,10 @@ private struct RailItem: View {
     var emphasized: Bool = false
     /// Optional trailing badge (e.g. "HEAD" on the checked-out branch).
     var badge: String? = nil
+    /// Divergence from upstream, shown before the badge as "{ahead}↑ {behind}↓". Both default to 0
+    /// (hidden) so non-branch rows leave them off. See `AheadBehindBadge`.
+    var ahead: Int = 0
+    var behind: Int = 0
     var indent: CGFloat = 0
     /// Optional double-click action. When set, a single click runs `action` and a double-click runs
     /// this — used for branch rows (click = view history, double-click = switch).
@@ -293,9 +298,12 @@ private struct RailItem: View {
                 .foregroundStyle(selected ? .white : theme.ink)
                 .lineLimit(1)
             Spacer(minLength: 6)
+            AheadBehindBadge(ahead: ahead, behind: behind, onAccent: selected)
             if let badge {
                 Text(badge)
                     .font(.system(size: 9.5, weight: .bold))
+                    .lineLimit(1)
+                    .fixedSize()   // never wrap "HEAD" to two lines when the ahead/behind badge tightens the row
                     .foregroundStyle(selected ? .white : theme.accentDeep)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(selected ? Color.white.opacity(0.22) : theme.accentSoft,

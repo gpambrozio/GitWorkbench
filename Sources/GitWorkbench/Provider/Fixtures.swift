@@ -105,11 +105,13 @@ public enum Fixtures {
         ),
     ]
 
-    // MARK: Branches (4)
+    // MARK: Branches (4). Ahead/behind mirrors what `git for-each-ref --format=%(upstream:track)`
+    // reports: `feat/auto-sync` matches `repositoryStatus` (ahead 2, behind 1); `fix/log-levels` has
+    // no upstream, so it stays 0/0.
     public static let branches: [Branch] = [
-        Branch(name: "main", isCurrent: false, upstream: "origin/main"),
-        Branch(name: "develop", isCurrent: false, upstream: "origin/develop"),
-        Branch(name: "feat/auto-sync", isCurrent: true, upstream: "origin/feat/auto-sync"),
+        Branch(name: "main", isCurrent: false, upstream: "origin/main", ahead: 0, behind: 3),
+        Branch(name: "develop", isCurrent: false, upstream: "origin/develop", ahead: 1, behind: 0),
+        Branch(name: "feat/auto-sync", isCurrent: true, upstream: "origin/feat/auto-sync", ahead: 2, behind: 1),
         Branch(name: "fix/log-levels", isCurrent: false, upstream: nil),
     ]
 

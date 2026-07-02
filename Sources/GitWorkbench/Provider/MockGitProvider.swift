@@ -144,7 +144,8 @@ extension MockGitProvider {
         status.currentBranch = branch.name
         status.upstream = branch.upstream
         branches = branches.map {
-            Branch(name: $0.name, isCurrent: $0.name == branch.name, upstream: $0.upstream)
+            Branch(name: $0.name, isCurrent: $0.name == branch.name, upstream: $0.upstream,
+                   ahead: $0.ahead, behind: $0.behind)
         }
     }
 
@@ -157,7 +158,8 @@ extension MockGitProvider {
             branches.append(Branch(name: branch.name, upstream: branch.id))
         }
         branches = branches.map {
-            Branch(name: $0.name, isCurrent: $0.name == branch.name, upstream: $0.upstream)
+            Branch(name: $0.name, isCurrent: $0.name == branch.name, upstream: $0.upstream,
+                   ahead: $0.ahead, behind: $0.behind)
         }
     }
 
