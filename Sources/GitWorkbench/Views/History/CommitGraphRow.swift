@@ -7,9 +7,9 @@ struct CommitGraphRow: View {
     @Environment(\.workbenchTheme) private var theme
     @State private var hover = false
     let commit: Commit
+    let selected: Bool
 
     var body: some View {
-        let selected = store.selectedCommitID == commit.id
         HStack(spacing: 0) {
             ZStack {
                 Rectangle().fill(selected ? .white : theme.sepStrong).frame(width: 2).frame(maxHeight: .infinity)

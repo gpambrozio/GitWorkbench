@@ -25,9 +25,12 @@ struct StashBody: View {
                     EmptyState(icon: IconLibrary.folder, title: "No stashes",
                                subtitle: "Shelved changes show up here.")
                 } else {
+                    let selectedStashID = store.selectedStashID
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(store.stashes) { StashRow(store: store, stash: $0) }
+                            ForEach(store.stashes) {
+                                StashRow(store: store, stash: $0, selected: $0.id == selectedStashID)
+                            }
                         }
                     }
                 }

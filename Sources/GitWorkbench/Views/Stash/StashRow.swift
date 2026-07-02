@@ -6,9 +6,9 @@ struct StashRow: View {
     @Environment(\.workbenchTheme) private var theme
     @State private var hover = false
     let stash: Stash
+    let selected: Bool
 
     var body: some View {
-        let selected = store.selectedStashID == stash.id
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
                 Text(stash.ref)

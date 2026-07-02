@@ -11,6 +11,7 @@ struct FileListRow: View {
     /// must skip — measured via `changesRowDoubleClickExcluded(in:)` and handed to the mouse catcher.
     @State private var doubleClickExclusions: [CGRect] = []
     let file: FileChange
+    let selected: Bool
 
     /// Name of the row's coordinate space; sub-control frames are reported in it, and the (flipped) mouse
     /// catcher overlay shares its origin, so the two line up for the double-click exclusion check.
@@ -27,7 +28,6 @@ struct FileListRow: View {
     private var fileURL: URL { file.url(relativeTo: store.configuration.repositoryURL) }
 
     var body: some View {
-        let selected = store.selectedFileID == file.id
         HStack(spacing: 8) {
             StageBox(checked: file.isStaged)
                 .contentShape(Rectangle())

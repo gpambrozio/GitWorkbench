@@ -30,9 +30,12 @@ struct HistoryBody: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
+                    let selectedCommitID = store.selectedCommitID
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(store.commits) { CommitGraphRow(store: store, commit: $0) }
+                            ForEach(store.commits) {
+                                CommitGraphRow(store: store, commit: $0, selected: $0.id == selectedCommitID)
+                            }
                         }
                     }
                 }

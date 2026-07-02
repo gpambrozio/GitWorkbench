@@ -10,6 +10,7 @@ struct ChangesFileList: View {
     var body: some View {
         let staged = store.staged
         let unstaged = store.unstaged
+        let selectedID = store.selectedFileID
         if staged.isEmpty && unstaged.isEmpty {
             EmptyState(icon: IconLibrary.check, title: "Working tree clean",
                        subtitle: "No changes to commit.", iconColor: theme.statusAdded)
@@ -19,12 +20,12 @@ struct ChangesFileList: View {
                     if !staged.isEmpty {
                         group(title: "Staged", count: staged.count, collapsed: $stagedCollapsed,
                               actionTitle: "Unstage all", action: { Task { await store.unstageAll() } },
-                              files: staged)
+                              files: staged, selectedID: selectedID)
                     }
                     if !unstaged.isEmpty {
                         group(title: "Changes", count: unstaged.count, collapsed: $changesCollapsed,
                               actionTitle: "Stage all", action: { Task { await store.stageAll() } },
-                              files: unstaged)
+                              files: unstaged, selectedID: selectedID)
                     }
                 }
             }
@@ -33,11 +34,11 @@ struct ChangesFileList: View {
 
     private func group(title: String, count: Int, collapsed: Binding<Bool>,
                        actionTitle: String, action: @escaping () -> Void,
-                       files: [FileChange]) -> some View {
+                       files: [FileChange], selectedID: FileChange.ID?) -> some View {
         Section {
             if !collapsed.wrappedValue {
                 ForEach(files) { file in
-                    FileListRow(store: store, file: file)
+                    FileListRow(store: store, file: file, selected: file.id == selectedID)
                         // A non-both-modified file keeps the same id (its path) when it flips between
                         // the Staged and Changes sections. In a LazyVStack with pinned headers SwiftUI
                         // reuses the moved row's subtree and leaves the StageBox stale, so fold the
