@@ -4,28 +4,21 @@ import SwiftUI
 struct FileListRow: View {
     var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
-    @Environment(\.changesFileInteractions) private var interactions
     @State private var hover = false
-    @State private var popover: PopoverContent?
     /// Row-local frames of the interactive sub-controls (stage box / discard button) that a double-click
     /// must skip — measured via `changesRowDoubleClickExcluded(in:)` and handed to the mouse catcher.
     @State private var doubleClickExclusions: [CGRect] = []
     let file: FileChange
     let selected: Bool
+    let repositoryRoot: URL?
 
     /// Name of the row's coordinate space; sub-control frames are reported in it, and the (flipped) mouse
     /// catcher overlay shares its origin, so the two line up for the double-click exclusion check.
     private static let rowSpace = "ChangesFileRow"
 
-    /// Identifiable box so the host's right-click popover content can drive `.popover(item:)`.
-    private struct PopoverContent: Identifiable {
-        let id = UUID()
-        let view: AnyView
-    }
-
     /// The clicked file's URL handed to the host's custom-action callbacks (absolute when the host set
     /// `WorkbenchConfiguration.repositoryURL`, otherwise path-only).
-    private var fileURL: URL { file.url(relativeTo: store.configuration.repositoryURL) }
+    private var fileURL: URL { file.url(relativeTo: repositoryRoot) }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -59,33 +52,8 @@ struct FileListRow: View {
         .onTapGesture { store.select(file: file.id) }
         .onHover { hover = $0 }
         .coordinateSpace(.named(Self.rowSpace))
-        .overlay { mouseCatcher }
+        .overlay { FileRowMouseLayer(fileURL: fileURL, exclusions: doubleClickExclusions) }
         .onPreferenceChange(DoubleClickExcludedFramesKey.self) { doubleClickExclusions = $0 }
-        .popover(item: $popover, arrowEdge: .trailing) { $0.view }
-    }
-
-    /// The opt-in right-click / double-click catcher — installed only when the host wired up a handler,
-    /// so default behavior is untouched. Right-click fires the action and/or opens the host popover.
-    @ViewBuilder private var mouseCatcher: some View {
-        if interactions.isActive {
-            ChangesMouseCatcher(
-                onRightClick: interactions.handlesRightClick ? { handleRightClick() } : nil,
-                onDoubleClick: interactions.onDoubleClick != nil ? { handleDoubleClick() } : nil,
-                doubleClickExclusions: doubleClickExclusions
-            )
-        }
-    }
-
-    private func handleRightClick() {
-        let url = fileURL
-        interactions.onRightClick?(url)
-        if let make = interactions.rightClickPopover, let view = make(url) {
-            popover = PopoverContent(view: view)
-        }
-    }
-
-    private func handleDoubleClick() {
-        interactions.onDoubleClick?(fileURL)
     }
 
     @ViewBuilder private func trailing(selected: Bool) -> some View {
@@ -123,6 +91,40 @@ struct FileListRow: View {
         if selected { return theme.accent }
         if hover { return theme.neutralFill(0.04) }
         return .clear
+    }
+}
+
+/// Owns the host-interaction plumbing so only this leaf depends on the closure-holding
+/// (uncomparable) environment key — FileListRow itself stays value-diffable.
+private struct FileRowMouseLayer: View {
+    @Environment(\.changesFileInteractions) private var interactions
+    let fileURL: URL
+    let exclusions: [CGRect]
+    @State private var popover: PopoverContent?
+
+    private struct PopoverContent: Identifiable {
+        let id = UUID()
+        let view: AnyView
+    }
+
+    var body: some View {
+        ZStack {   // stable single root even when inactive
+            if interactions.isActive {
+                ChangesMouseCatcher(
+                    onRightClick: interactions.handlesRightClick ? { handleRightClick() } : nil,
+                    onDoubleClick: interactions.onDoubleClick != nil ? { interactions.onDoubleClick?(fileURL) } : nil,
+                    doubleClickExclusions: exclusions
+                )
+            }
+        }
+        .popover(item: $popover, arrowEdge: .trailing) { $0.view }
+    }
+
+    private func handleRightClick() {
+        interactions.onRightClick?(fileURL)
+        if let make = interactions.rightClickPopover, let view = make(fileURL) {
+            popover = PopoverContent(view: view)
+        }
     }
 }
 

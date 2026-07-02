@@ -11,6 +11,7 @@ struct ChangesFileList: View {
         let staged = store.staged
         let unstaged = store.unstaged
         let selectedID = store.selectedFileID
+        let repositoryRoot = store.configuration.repositoryURL
         if staged.isEmpty && unstaged.isEmpty {
             EmptyState(icon: IconLibrary.check, title: "Working tree clean",
                        subtitle: "No changes to commit.", iconColor: theme.statusAdded)
@@ -20,12 +21,12 @@ struct ChangesFileList: View {
                     if !staged.isEmpty {
                         group(title: "Staged", count: staged.count, collapsed: $stagedCollapsed,
                               actionTitle: "Unstage all", action: { Task { await store.unstageAll() } },
-                              files: staged, selectedID: selectedID)
+                              files: staged, selectedID: selectedID, repositoryRoot: repositoryRoot)
                     }
                     if !unstaged.isEmpty {
                         group(title: "Changes", count: unstaged.count, collapsed: $changesCollapsed,
                               actionTitle: "Stage all", action: { Task { await store.stageAll() } },
-                              files: unstaged, selectedID: selectedID)
+                              files: unstaged, selectedID: selectedID, repositoryRoot: repositoryRoot)
                     }
                 }
             }
@@ -34,11 +35,12 @@ struct ChangesFileList: View {
 
     private func group(title: String, count: Int, collapsed: Binding<Bool>,
                        actionTitle: String, action: @escaping () -> Void,
-                       files: [FileChange], selectedID: FileChange.ID?) -> some View {
+                       files: [FileChange], selectedID: FileChange.ID?, repositoryRoot: URL?) -> some View {
         Section {
             if !collapsed.wrappedValue {
                 ForEach(files) { file in
-                    FileListRow(store: store, file: file, selected: file.id == selectedID)
+                    FileListRow(store: store, file: file, selected: file.id == selectedID,
+                                repositoryRoot: repositoryRoot)
                         // A non-both-modified file keeps the same id (its path) when it flips between
                         // the Staged and Changes sections. In a LazyVStack with pinned headers SwiftUI
                         // reuses the moved row's subtree and leaves the StageBox stale, so fold the
