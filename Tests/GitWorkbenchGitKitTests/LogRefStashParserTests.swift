@@ -24,12 +24,33 @@ final class LogRefStashParserTests: XCTestCase {
 
     func test_refParsesBranches() {
         let F = "\u{1f}"
-        let lines = ["main\(F)origin/main\(F)*", "feat/x\(F)origin/feat/x\(F)", "dev\(F)\(F)"]
+        // Four fields: name, upstream, HEAD marker, upstream:track.
+        let lines = ["main\(F)origin/main\(F)*\(F)", "feat/x\(F)origin/feat/x\(F)\(F)[ahead 2]", "dev\(F)\(F)\(F)"]
         let branches = RefParser.parse(lines.joined(separator: "\n"))
         XCTAssertEqual(branches.map(\.name), ["main", "feat/x", "dev"])
         XCTAssertEqual(branches.first(where: { $0.name == "main" })?.upstream, "origin/main")
         XCTAssertTrue(branches.first(where: { $0.name == "main" })!.isCurrent)
         XCTAssertNil(branches.first(where: { $0.name == "dev" })?.upstream)
+        XCTAssertEqual(branches.first(where: { $0.name == "feat/x" })?.ahead, 2)
+    }
+
+    func test_refParsesAheadBehindTrack() {
+        let F = "\u{1f}"
+        let lines = [
+            "sync\(F)origin/sync\(F)\(F)[ahead 2, behind 1]",   // diverged both ways
+            "ahead-only\(F)origin/ahead-only\(F)\(F)[ahead 3]",
+            "behind-only\(F)origin/behind-only\(F)\(F)[behind 4]",
+            "even\(F)origin/even\(F)\(F)",                        // in sync: empty track
+            "gone\(F)origin/gone\(F)\(F)[gone]",                  // upstream deleted
+            "local\(F)\(F)\(F)",                                  // no upstream at all
+        ]
+        let byName = Dictionary(uniqueKeysWithValues: RefParser.parse(lines.joined(separator: "\n")).map { ($0.name, $0) })
+        XCTAssertEqual(byName["sync"].map { [$0.ahead, $0.behind] }, [2, 1])
+        XCTAssertEqual(byName["ahead-only"].map { [$0.ahead, $0.behind] }, [3, 0])
+        XCTAssertEqual(byName["behind-only"].map { [$0.ahead, $0.behind] }, [0, 4])
+        XCTAssertEqual(byName["even"].map { [$0.ahead, $0.behind] }, [0, 0])
+        XCTAssertEqual(byName["gone"].map { [$0.ahead, $0.behind] }, [0, 0])   // "[gone]" → no counts
+        XCTAssertEqual(byName["local"].map { [$0.ahead, $0.behind] }, [0, 0])
     }
 
     func test_remoteRefParsesBranchesStrippingRemotePrefix() {

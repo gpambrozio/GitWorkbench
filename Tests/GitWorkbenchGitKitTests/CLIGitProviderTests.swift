@@ -84,6 +84,33 @@ final class CLIGitProviderTests: XCTestCase {
         let branches = try await provider.loadBranches()
         XCTAssertEqual(branches.map(\.name), ["main"])
         XCTAssertTrue(branches[0].isCurrent)
+        XCTAssertNil(branches[0].upstream)      // no remote yet → no divergence
+        XCTAssertEqual(branches[0].ahead, 0)
+        XCTAssertEqual(branches[0].behind, 0)
+    }
+
+    func test_loadBranchesReportsAheadBehindAgainstUpstream() async throws {
+        let origin = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("gwbremote-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: origin) }
+        try await git(["init", "--bare", origin.path])
+        try await git(["remote", "add", "origin", origin.path])
+        try await git(["push", "-u", "origin", "main"])   // main tracks origin/main, in sync
+
+        // A commit pushed to origin, then reset away locally → local main is 1 commit behind.
+        try write("d.txt", "on origin\n"); try await git(["add", "d.txt"])
+        try await git(["commit", "-m", "second"])
+        try await git(["push"])                            // origin/main advances to "second"
+        try await git(["reset", "--hard", "HEAD~1"])       // local main falls back → behind 1
+
+        // A commit origin doesn't have → local main is also 1 commit ahead.
+        try write("e.txt", "local only\n"); try await git(["add", "e.txt"])
+        try await git(["commit", "-m", "local only"])
+
+        let main = try await provider.loadBranches().first { $0.name == "main" }
+        XCTAssertEqual(main?.upstream, "origin/main")
+        XCTAssertEqual(main?.ahead, 1)   // "local only"
+        XCTAssertEqual(main?.behind, 1)  // "second"
     }
 
     func test_loadRemoteBranchesStripsPrefixAndSkipsHEAD() async throws {

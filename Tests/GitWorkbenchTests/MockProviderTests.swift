@@ -113,6 +113,8 @@ final class MockProviderTests: XCTestCase {
         XCTAssertEqual(status.currentBranch, "main")
         let branches = try await p.loadBranches()
         XCTAssertEqual(branches.first(where: \.isCurrent)?.name, "main")
+        // Switching rebuilds the branch list; each branch keeps its ahead/behind (main: behind 3).
+        XCTAssertEqual(branches.first { $0.name == "main" }.map { [$0.ahead, $0.behind] }, [0, 3])
     }
 
     func test_checkoutRemoteBranchTracksAndCreatesLocalBranch() async throws {

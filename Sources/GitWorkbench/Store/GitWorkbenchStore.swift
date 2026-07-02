@@ -356,6 +356,7 @@ public extension GitWorkbenchStore {
             state.repo.files.removeAll { $0.isStaged }
             state.commitMessage = ""
             state.repo.ahead += 1
+            syncCurrentBranchDivergence()
             state.commits.insert(newCommit, at: 0)
             state.selectedFileID = nil
             state.currentDiff = nil
@@ -392,6 +393,7 @@ public extension GitWorkbenchStore {
             }
             state.repo.ahead = result.ahead
             state.repo.behind = result.behind
+            syncCurrentBranchDivergence()
             // A pull moves HEAD forward with the fetched commits, so the History view's
             // commit list is now stale — refresh it.
             if kind == .pull { await reloadHistory() }
@@ -401,6 +403,21 @@ public extension GitWorkbenchStore {
             state.isBusy = false
             setError(mapSyncError(error, kind: kind))
         }
+    }
+
+    /// Mirror the current branch's ahead/behind onto its entry in `state.branches`, so the rail row
+    /// stays in step with the toolbar Pull/Push badges after an optimistic commit/pull/push (both read
+    /// these counts, from different fields). A later reload refreshes `state.branches` from
+    /// `for-each-ref`; this keeps the two consistent in the window before that — and in the mock, which
+    /// has no filesystem watcher to trigger one.
+    private func syncCurrentBranchDivergence() {
+        // Only mirror when the branch has an upstream: `commit()` bumps `state.repo.ahead` even on an
+        // upstream-less branch, and writing that here would render a bogus `↑` badge (`AheadBehindBadge`
+        // shows nothing without an upstream). CLI hosts self-heal on the next reload; the mock does not.
+        guard let idx = state.branches.firstIndex(where: { $0.name == state.repo.currentBranch }),
+              state.branches[idx].upstream != nil else { return }
+        state.branches[idx].ahead = state.repo.ahead
+        state.branches[idx].behind = state.repo.behind
     }
 
     private func mapSyncError(_ error: Error, kind: SyncKind) -> Error {
