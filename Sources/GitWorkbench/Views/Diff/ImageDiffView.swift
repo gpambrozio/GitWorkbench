@@ -13,8 +13,9 @@ enum ImageCompareMode: String, CaseIterable, Hashable {
 enum DividerAxis: Hashable { case vertical, horizontal }
 
 /// Renders an image file. Added/deleted → the single image filling the pane; modified → the
-/// before/after comparer. Bytes are decoded asynchronously per file (a spinner shows until
-/// they're ready); `.id(file.id)` on the parent resets the decoded state per file.
+/// before/after comparer. Bytes are decoded asynchronously (a spinner shows until they're ready);
+/// the decode re-runs whenever `content`'s bytes change — including an external edit to the same
+/// file reloaded by the repository watcher, not just a switch to a different file.
 struct ImageDiffView: View {
     let file: FileChange
     let content: BinaryContent
@@ -48,8 +49,10 @@ struct ImageDiffView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task(id: file.id) {
-            // NSImage isn't Sendable, so decode on the main actor — but yield first so the
+        .task(id: content) {
+            // Keyed on `content` (not `file.id`) so a bytes change re-decodes even when the file
+            // identity is unchanged — e.g. the watcher reloading this same file after an external
+            // edit. NSImage isn't Sendable, so decode on the main actor — but yield first so the
             // spinner paints before the decode work runs, instead of blocking this body.
             await Task.yield()
             decoded = Decoded(old: content.old.flatMap { NSImage(data: $0) },

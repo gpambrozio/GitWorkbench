@@ -4,7 +4,8 @@ import PDFKit
 /// Renders a PDF file. Added/deleted → the single document filling the pane; modified → the old and
 /// new documents side by side (the issue asks for side-by-side PDFs). PDFKit handles scaling
 /// (`autoScales`) and scrolling, so a large document scales down to fit and pages beyond the first
-/// stay reachable.
+/// stay reachable. Validation re-runs whenever `content`'s bytes change — including an external
+/// edit to the same file reloaded by the repository watcher, not just a switch to a different file.
 struct PDFDiffView: View {
     let content: BinaryContent
     let file: FileChange
@@ -35,7 +36,9 @@ struct PDFDiffView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task(id: file.id) {
+        .task(id: content) {
+            // Keyed on `content` (not `file.id`) so a bytes change re-validates even when the file
+            // identity is unchanged — e.g. the watcher reloading this same file after an external edit.
             await Task.yield()   // let the spinner paint first (PDFDocument is main-actor here)
             validated = Validated(old: content.old.flatMap(renderablePDF),
                                   new: content.new.flatMap(renderablePDF))
