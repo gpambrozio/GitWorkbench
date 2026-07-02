@@ -65,6 +65,26 @@ final class StoreReducerTests: XCTestCase {
         XCTAssertEqual(restoredStore.state.diffMode, .unified) // diff mode survives too
     }
 
+    // MARK: - Staged binary diff
+
+    /// Reproduces the reported bug: staging an image then opening it dropped the diff, because the
+    /// diff was requested with `.workingTree(staged: true)` and the mock only resolved unstaged.
+    func test_stagingBinaryImageStillShowsItsDiff() async throws {
+        let store = makeStore()
+        await store.reload()
+        let banner = try XCTUnwrap(store.state.repo.files.first { $0.path == "assets/banner.png" })
+        XCTAssertFalse(banner.isStaged)
+
+        await store.toggleStage(banner.id)                       // user stages the image
+        let staged = try XCTUnwrap(store.state.repo.files.first { $0.id == banner.id })
+        XCTAssertTrue(staged.isStaged)
+
+        await store.loadDiff(for: staged, context: .workingTree(staged: staged.isStaged))
+        let diff = try XCTUnwrap(store.state.currentDiff, "staged image must still show a diff")
+        XCTAssertTrue(diff.isBinary)
+        XCTAssertEqual(try XCTUnwrap(diff.binaryContent).kind, .image)
+    }
+
     // MARK: - Branch-rail collapse state
 
     func test_railCollapseDefaultsCollapseAllButCurrentBranchOnFirstApply() {

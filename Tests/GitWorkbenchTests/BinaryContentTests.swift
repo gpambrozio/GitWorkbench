@@ -49,6 +49,16 @@ final class BinaryContentTests: XCTestCase {
         XCTAssertNotEqual(old, new, "before/after differ so the compare modes show something")
     }
 
+    func test_fixtureStagedImageStillResolvesContent() throws {
+        // Staging a binary fixture in the demo re-requests the diff with staged: true; the mock has one
+        // blob per path used for both states, so it must still resolve the image (regression guard).
+        let banner = try XCTUnwrap(Fixtures.files.first { $0.path == "assets/banner.png" })
+        let diff = try XCTUnwrap(FixtureDiffs.diff(for: banner, context: .workingTree(staged: true)),
+                                 "a staged binary fixture must still show its diff")
+        XCTAssertTrue(diff.isBinary)
+        XCTAssertEqual(try XCTUnwrap(diff.binaryContent).kind, .image)
+    }
+
     func test_fixtureAddedImageHasOnlyNew() throws {
         let shot = try XCTUnwrap(Fixtures.files.first { $0.path == "assets/screenshot.png" })
         let diff = try XCTUnwrap(FixtureDiffs.diff(for: shot, context: .workingTree(staged: false)))

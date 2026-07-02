@@ -6,9 +6,10 @@ public enum FixtureDiffs {
 
     /// Resolve a diff for a file in a context, or nil if there is no fixture for it.
     public static func diff(for file: FileChange, context: DiffRequest.Context) -> FileDiff? {
-        // Binary image/PDF fixtures (issue #12) live only in the unstaged working tree — guard on
-        // `staged == false` explicitly so a staged lookup doesn't accidentally return unstaged content.
-        if case .workingTree(let staged) = context, !staged, let content = binaryContent[file.path] {
+        // Binary image/PDF fixtures (issue #12) live in the working tree. There's a single blob per
+        // path — no separate staged version — so the same content resolves whether or not the file is
+        // staged: staging a fixture in the demo must still show its image/PDF diff.
+        if case .workingTree = context, let content = binaryContent[file.path] {
             return FileDiff(file: file, hunks: [], isBinary: true, binaryContent: content)
         }
         let hunks: [DiffHunk]?
