@@ -9,8 +9,11 @@ struct DiffView: View {
 
     var body: some View {
         Group {
-            if diff.isBinary {
-                binary
+            if let content = diff.binaryContent {
+                // Image / PDF viewer. `.id` resets the comparison controls' local state per file.
+                BinaryDiffView(content: content, file: diff.file).id(diff.file.id)
+            } else if diff.isBinary {
+                BinaryPlaceholder(file: diff.file)
             } else if diff.file.status == .deleted {
                 scrollingCode(minWidth: contentMinWidth) { deletedRows }
             } else if mode == .split {
@@ -63,16 +66,6 @@ struct DiffView: View {
     private var contentMinWidth: CGFloat {
         let code = DiffMetrics.maxCodeWidth(diff) + 28
         return Tokens.unifiedGutterWidth * 2 + Tokens.unifiedSignWidth + 16 + code
-    }
-
-    private var binary: some View {
-        VStack(spacing: 6) {
-            Image(systemName: IconLibrary.file).font(.system(size: 22)).foregroundStyle(theme.ink3)
-            Text("Binary file").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.ink2)
-            Text("+\(diff.file.additions) \u{2212}\(diff.file.deletions)")
-                .font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.ink3)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

@@ -14,7 +14,7 @@ struct StashBody: View {
                     Text("STASHES").font(.system(size: 11, weight: .bold)).tracking(0.4).foregroundStyle(theme.ink3)
                     Text("\(store.state.stashes.count)").font(.system(size: 11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(theme.ink3).padding(.horizontal, 6).padding(.vertical, 1)
-                        .background(Color.black.opacity(0.06), in: Capsule())
+                        .background(theme.neutralFill(0.06), in: Capsule())
                     Spacer()
                 }
                 .padding(.horizontal, 14).frame(height: 44)

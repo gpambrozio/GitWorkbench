@@ -246,7 +246,7 @@ private struct FolderRow: View {
         .padding(.leading, 8 + CGFloat(depth) * Tokens.railIndentStep).padding(.trailing, 8)
         .frame(height: Tokens.railRowHeight)
         .frame(maxWidth: .infinity)
-        .background(hover ? Color.black.opacity(0.05) : .clear,
+        .background(hover ? theme.neutralFill(0.05) : .clear,
                     in: RoundedRectangle(cornerRadius: Tokens.rowRadius, style: .continuous))
         .contentShape(Rectangle())
     }
@@ -324,7 +324,7 @@ private struct RailItem: View {
 
     private var rowBackground: Color {
         if selected { return theme.accent }
-        if hover { return Color.black.opacity(0.05) }
+        if hover { return theme.neutralFill(0.05) }
         return .clear
     }
 }

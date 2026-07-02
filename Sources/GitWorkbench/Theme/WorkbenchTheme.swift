@@ -4,6 +4,10 @@ import SwiftUI
 /// is the dark variant. Source: docs/design_handoff/04-design-tokens.md §4.1.
 public struct WorkbenchTheme: Sendable {
     public var adoptsSystemAccent: Bool
+    /// Whether this is a dark variant. Drives `neutralFill(_:)` so subtle black tints invert to white
+    /// on the dark surface. Required at init (no default) — only the caller knows whether the surfaces
+    /// it's supplying are light or dark, so it must say.
+    public var isDark: Bool
 
     // accent family
     public var accent: Color
@@ -46,10 +50,12 @@ public struct WorkbenchTheme: Sendable {
     public var hunkHeaderBg: Color
 
     /// Build a custom theme. Every token defaults to the light identity (`.standard`), so a host can
-    /// override only what it wants — e.g. `WorkbenchTheme(accent: .pink, winBg: .black)`. For a dark
-    /// variant, start from `.darkStandard` and copy-and-tweak, or pass it as `configuration.darkTheme`.
+    /// override only what it wants — e.g. `WorkbenchTheme(isDark: true, accent: .pink, winBg: .black)`.
+    /// `isDark` is required so a host supplying dark surfaces also opts its neutral tints into dark. For
+    /// a dark variant, start from `.darkStandard` and copy-and-tweak, or pass it as `configuration.darkTheme`.
     public init(
         adoptsSystemAccent: Bool = false,
+        isDark: Bool,
         accent: Color = Self.standard.accent,
         accentDeep: Color = Self.standard.accentDeep,
         accentSoft: Color = Self.standard.accentSoft,
@@ -80,6 +86,7 @@ public struct WorkbenchTheme: Sendable {
         hunkHeaderBg: Color = Self.standard.hunkHeaderBg
     ) {
         self.adoptsSystemAccent = adoptsSystemAccent
+        self.isDark = isDark
         self.accent = accent; self.accentDeep = accentDeep; self.accentSoft = accentSoft; self.accentRing = accentRing
         self.winBg = winBg; self.sidebar = sidebar; self.sidebarDeep = sidebarDeep; self.titlebar = titlebar; self.field = field
         self.ink = ink; self.ink2 = ink2; self.ink3 = ink3
@@ -89,6 +96,13 @@ public struct WorkbenchTheme: Sendable {
         self.addBg = addBg; self.addGut = addGut; self.addInk = addInk
         self.delBg = delBg; self.delGut = delGut; self.delInk = delInk
         self.splitEmptyCell = splitEmptyCell; self.hunkHeaderBg = hunkHeaderBg
+    }
+
+    /// A neutral (non-accent) tint for chips, tracks, hover states, and secondary/disabled control
+    /// fills. Light mode uses a black tint (matching the handoff's `rgba(0,0,0,x)`); dark mode inverts
+    /// to a white tint at ~1.5× alpha (§4.1 dark-mode note) so it stays visible on the dark surface.
+    public func neutralFill(_ alpha: Double) -> Color {
+        isDark ? Color.white.opacity(alpha * 1.5) : Color.black.opacity(alpha)
     }
 
     /// Color for a given file status.
@@ -125,6 +139,7 @@ public struct WorkbenchTheme: Sendable {
     /// Light purple identity (default).
     public static let standard = WorkbenchTheme(
         adoptsSystemAccent: false,
+        isDark: false,
         accent: Color(hex: 0x7C5CE0),
         accentDeep: Color(hex: 0x6A49D4),
         accentSoft: Color(hex: 0x7C5CE0, opacity: 0.13),
@@ -159,6 +174,7 @@ public struct WorkbenchTheme: Sendable {
     /// inverted neutral surfaces/ink (§4.1 dark-mode note).
     public static let darkStandard = WorkbenchTheme(
         adoptsSystemAccent: false,
+        isDark: true,
         accent: Color(hex: 0x7C5CE0),
         accentDeep: Color(hex: 0x8B6CF0),
         accentSoft: Color(hex: 0x7C5CE0, opacity: 0.22),

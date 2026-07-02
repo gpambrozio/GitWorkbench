@@ -27,7 +27,7 @@ struct DetailFileRow: View {
             .padding(.horizontal, 16)
             .frame(height: Tokens.detailFileRowHeight)
             .frame(maxWidth: .infinity)
-            .background(selected ? theme.accentSoft : (hover ? Color.black.opacity(0.03) : .clear))
+            .background(selected ? theme.accentSoft : (hover ? theme.neutralFill(0.03) : .clear))
             .overlay(alignment: .leading) { if selected { Rectangle().fill(theme.accent).frame(width: 2) } }
             .contentShape(Rectangle())
         }

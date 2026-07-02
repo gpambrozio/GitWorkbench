@@ -24,7 +24,7 @@ struct ToolButton: View {
                         .font(.system(size: 11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(theme.ink3)
                         .padding(.horizontal, 6).padding(.vertical, 1)
-                        .background(Color.black.opacity(0.06), in: Capsule())
+                        .background(theme.neutralFill(0.06), in: Capsule())
                 }
             }
             .font(.system(size: 12.5, weight: role == .primary ? .semibold : .medium))
@@ -50,7 +50,7 @@ struct ToolButton: View {
 
     private var background: Color {
         switch role {
-        case .normal:  return active ? Color.black.opacity(0.08) : .clear
+        case .normal:  return active ? theme.neutralFill(0.08) : .clear
         case .primary: return theme.accent
         case .danger:  return theme.delBg
         }

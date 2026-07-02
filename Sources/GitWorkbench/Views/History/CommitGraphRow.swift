@@ -41,7 +41,7 @@ struct CommitGraphRow: View {
             .padding(.init(top: 9, leading: 2, bottom: 9, trailing: 14))
         }
         .frame(maxWidth: .infinity)
-        .background(selected ? theme.accent : (hover ? Color.black.opacity(0.04) : .clear))
+        .background(selected ? theme.accent : (hover ? theme.neutralFill(0.04) : .clear))
         .overlay(alignment: .bottom) { Rectangle().fill(theme.sep).frame(height: 1) }
         .contentShape(Rectangle())
         .onTapGesture { Task { await store.selectCommit(commit.id) } }

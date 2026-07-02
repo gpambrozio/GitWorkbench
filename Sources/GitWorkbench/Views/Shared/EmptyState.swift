@@ -11,7 +11,7 @@ struct EmptyState: View {
     var body: some View {
         VStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(Color.black.opacity(0.05))
+                .fill(theme.neutralFill(0.05))
                 .frame(width: 46, height: 46)
                 .overlay(
                     Image(systemName: icon)

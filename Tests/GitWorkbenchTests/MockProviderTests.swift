@@ -7,7 +7,7 @@ final class MockProviderTests: XCTestCase {
     func test_loadStatusReturnsSeededRepo() async throws {
         let status = try await provider().loadStatus()
         XCTAssertEqual(status.repositoryName, "aurora-cli")
-        XCTAssertEqual(status.files.count, 7)
+        XCTAssertEqual(status.files.count, 10)
         XCTAssertEqual(status.ahead, 2)
         XCTAssertEqual(status.behind, 1)
     }
@@ -65,7 +65,7 @@ final class MockProviderTests: XCTestCase {
         try await p.discard(readme)
         let status = try await p.loadStatus()
         XCTAssertNil(status.files.first { $0.path == "README.md" })
-        XCTAssertEqual(status.files.count, 6)
+        XCTAssertEqual(status.files.count, 9)
     }
 
     func test_commitRemovesStagedBumpsAheadAndPrepends() async throws {
