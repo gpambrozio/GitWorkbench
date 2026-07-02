@@ -7,6 +7,7 @@ struct WorkbenchToolbar: View {
     @Environment(\.workbenchTheme) private var theme
 
     var body: some View {
+        @Bindable var store = store
         HStack(spacing: 0) {
             Text(store.repo.repositoryName)
                 .font(.system(size: 13, weight: .bold))
@@ -28,7 +29,7 @@ struct WorkbenchToolbar: View {
 
             Spacer(minLength: 0)
 
-            Segmented(value: diffMode, options: [
+            Segmented(value: $store.diffMode, options: [
                 .init(value: .unified, icon: IconLibrary.unifiedRows),
                 .init(value: .split, icon: IconLibrary.splitColumns),
             ])
@@ -37,9 +38,5 @@ struct WorkbenchToolbar: View {
         .frame(height: Tokens.toolbarHeight)
         .background(theme.titlebar)
         .overlay(alignment: .bottom) { Rectangle().fill(theme.sep).frame(height: 1) }
-    }
-
-    private var diffMode: Binding<DiffMode> {
-        Binding(get: { store.diffMode }, set: { store.setDiffMode($0) })
     }
 }

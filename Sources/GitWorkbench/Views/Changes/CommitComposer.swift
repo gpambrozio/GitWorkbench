@@ -6,6 +6,7 @@ struct CommitComposer: View {
     @FocusState private var focused: Bool
 
     var body: some View {
+        @Bindable var store = store
         let canCommit = store.canCommit
         VStack(spacing: 8) {
             ZStack(alignment: .topLeading) {
@@ -14,7 +15,7 @@ struct CommitComposer: View {
                         .font(.system(size: 13)).foregroundStyle(theme.ink3)
                         .padding(.horizontal, 12).padding(.vertical, 10).allowsHitTesting(false)
                 }
-                TextEditor(text: messageBinding)
+                TextEditor(text: $store.commitMessage)
                     .font(.system(size: 13))
                     .foregroundStyle(theme.ink)
                     .scrollContentBackground(.hidden)
@@ -52,8 +53,5 @@ struct CommitComposer: View {
         let n = store.staged.count
         let files = n == 1 ? "file" : "files"
         return n > 0 ? "Commit \(n) \(files) to \(store.repo.currentBranch)" : "Commit"
-    }
-    private var messageBinding: Binding<String> {
-        Binding(get: { store.commitMessage }, set: { store.setCommitMessage($0) })
     }
 }

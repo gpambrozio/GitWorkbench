@@ -18,12 +18,12 @@ public final class GitWorkbenchStore {
     // headless hosts — reading it observes *everything*, so views use the fields.
 
     public private(set) var activeView: WorkspaceView
-    public private(set) var diffMode: DiffMode
+    public var diffMode: DiffMode { didSet { saveDiffMode(diffMode) } }
     public private(set) var repo: RepositoryStatus
     public private(set) var branches: [Branch] = []
     public private(set) var remoteBranches: [RemoteBranch] = []
     public private(set) var selectedFileID: FileChange.ID?
-    public private(set) var commitMessage: String = ""
+    public var commitMessage: String = ""
     public private(set) var pendingDiscard: FileChange?
     public private(set) var commits: [Commit] = []
     public private(set) var selectedCommitID: Commit.ID?
@@ -50,6 +50,12 @@ public final class GitWorkbenchStore {
     public var isBrowsingOtherBranch: Bool {
         guard let historyBranch else { return false }
         return historyBranch != repo.currentBranch
+    }
+
+    /// Bindable façade over the pending-ref name (TextField binding in NewRefPopover).
+    public var pendingRefName: String {
+        get { pendingRefCreation?.name ?? "" }
+        set { pendingRefCreation?.name = newValue }
     }
 
     // MARK: Compatibility snapshot
@@ -305,10 +311,7 @@ public final class GitWorkbenchStore {
     // MARK: Selection (synchronous intents)
 
     public func select(_ view: WorkspaceView) { activeView = view }
-    public func setDiffMode(_ mode: DiffMode) {
-        diffMode = mode
-        saveDiffMode(mode)
-    }
+    public func setDiffMode(_ mode: DiffMode) { diffMode = mode }
 
     public func setCommitMessage(_ text: String) { commitMessage = text }
 

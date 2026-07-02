@@ -14,16 +14,12 @@ struct NewRefPopover: View {
     private var placeholder: String { isBranch ? "branch name" : "tag name" }
     private var actionTitle: String { isBranch ? "Create Branch" : "Create Tag" }
 
-    private var nameBinding: Binding<String> {
-        Binding(get: { store.pendingRefCreation?.name ?? "" },
-                set: { store.setPendingRefName($0) })
-    }
-
     private var canCreate: Bool {
-        !nameBinding.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !store.pendingRefName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
+        @Bindable var store = store
         ZStack {
             Color.black.opacity(0.18).ignoresSafeArea()
                 .onTapGesture { store.cancelRefCreation() }
@@ -33,7 +29,7 @@ struct NewRefPopover: View {
                     .overlay(Image(systemName: icon).font(.system(size: 18)).foregroundStyle(theme.accent))
                 Text("\(title) from \(pending.commit.shortSHA)")
                     .font(.system(size: 15, weight: .bold)).foregroundStyle(theme.ink)
-                TextField(placeholder, text: nameBinding)
+                TextField(placeholder, text: $store.pendingRefName)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .foregroundStyle(theme.ink)
