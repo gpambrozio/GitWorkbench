@@ -11,8 +11,11 @@ struct ChangesDiffPane: View {
                 header(file)
                 if let diff = store.currentDiff, diff.file.id == file.id {
                     DiffView(diff: diff, mode: store.diffMode)
+                } else if store.isLoadingDiff {
+                    DiffLoadingIndicator()
                 } else {
-                    Spacer()
+                    // A file is selected but its diff never arrived: the load failed.
+                    EmptyState(icon: IconLibrary.file, title: "Couldn\u{2019}t load diff")
                 }
             } else {
                 EmptyState(icon: IconLibrary.file,
