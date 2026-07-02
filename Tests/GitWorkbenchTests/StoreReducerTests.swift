@@ -259,6 +259,45 @@ final class StoreReducerTests: XCTestCase {
         XCTAssertEqual(store.staged, store.state.staged)
         XCTAssertEqual(store.canCommit, store.state.canCommit)
     }
+
+    // MARK: Diff-loading flag (spinner support)
+
+    func test_isLoadingDiffDuringAndAfterLoad() async throws {
+        let store = GitWorkbenchStore(provider: MockGitProvider(delay: .milliseconds(80)))
+        await store.reload()
+        let file = try XCTUnwrap(store.repo.files.first)
+        store.select(file: file.id)
+        XCTAssertTrue(store.isLoadingDiff)          // in flight
+        await store.diffTask?.value
+        XCTAssertFalse(store.isLoadingDiff)         // cleared on success
+        XCTAssertEqual(store.currentDiff?.file.id, file.id)
+    }
+
+    func test_isLoadingDiffClearsOnFailure() async throws {
+        let store = GitWorkbenchStore(provider: FailingProvider())  // loadDiff throws
+        await store.reload()
+        let file = try XCTUnwrap(store.repo.files.first)
+        store.select(file: file.id)
+        await store.diffTask?.value
+        XCTAssertFalse(store.isLoadingDiff)         // failure must not spin forever
+        XCTAssertNil(store.currentDiff)             // panes show "Couldn't load diff"
+    }
+
+    func test_isLoadingDiffSurvivesRapidReselection() async throws {
+        let store = GitWorkbenchStore(provider: MockGitProvider(delay: .milliseconds(80)))
+        await store.reload()
+        let a = try XCTUnwrap(store.repo.files.first)
+        let b = try XCTUnwrap(store.repo.files.dropFirst().first)
+        store.select(file: a.id)
+        let staleTask = store.diffTask
+        store.select(file: b.id)                    // cancels A's load, starts B's
+        XCTAssertTrue(store.isLoadingDiff)
+        await staleTask?.value                      // A finishing (cancelled) must NOT clear the flag
+        XCTAssertTrue(store.isLoadingDiff)
+        await store.diffTask?.value
+        XCTAssertFalse(store.isLoadingDiff)
+        XCTAssertEqual(store.currentDiff?.file.id, b.id)
+    }
 }
 
 /// A provider whose reads return fixtures but whose actions always throw — for error-path tests.
