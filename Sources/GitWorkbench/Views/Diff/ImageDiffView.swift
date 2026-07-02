@@ -13,33 +13,48 @@ enum ImageCompareMode: String, CaseIterable, Hashable {
 enum DividerAxis: Hashable { case vertical, horizontal }
 
 /// Renders an image file. Added/deleted → the single image filling the pane; modified → the
-/// before/after comparer. Bytes are decoded once per view instance (the parent re-identifies this view
-/// per file via `.id`, so a new file re-decodes).
+/// before/after comparer. Bytes are decoded asynchronously per file (a spinner shows until
+/// they're ready); `.id(file.id)` on the parent resets the decoded state per file.
 struct ImageDiffView: View {
     let file: FileChange
-    private let oldImage: NSImage?
-    private let newImage: NSImage?
-    /// Whether both sides carried bytes (a genuine modification). Used to tell a real add/delete apart
-    /// from a modification where one side simply failed to decode.
-    private let bothSidesHadBytes: Bool
+    let content: BinaryContent
+    @State private var decoded: Decoded?
+
+    /// Decoded sides. `bothSidesHadBytes` distinguishes a real add/delete from a modification
+    /// where one side failed to decode (corrupt blob / Git-LFS pointer).
+    private struct Decoded {
+        var old: NSImage?
+        var new: NSImage?
+        var bothSidesHadBytes: Bool
+    }
 
     init(content: BinaryContent, file: FileChange) {
+        self.content = content
         self.file = file
-        self.oldImage = content.old.flatMap { NSImage(data: $0) }
-        self.newImage = content.new.flatMap { NSImage(data: $0) }
-        self.bothSidesHadBytes = content.old != nil && content.new != nil
     }
 
     var body: some View {
-        if let oldImage, let newImage {
-            ModifiedImageComparer(old: oldImage, new: newImage)
-        } else if !bothSidesHadBytes, let single = newImage ?? oldImage {
-            ImageCanvas(image: single).padding(16)   // added / deleted: fill the available space
-        } else {
-            // Placeholder, not a one-sided image: either nothing decoded, or a modification where only
-            // one side decoded (a corrupt/unsupported blob, or a Git-LFS pointer) — which would
-            // otherwise be mislabeled as an add/delete.
-            BinaryPlaceholder(file: file, caption: "Can\u{2019}t display image")
+        ZStack {
+            if let decoded {
+                if let old = decoded.old, let new = decoded.new {
+                    ModifiedImageComparer(old: old, new: new)
+                } else if !decoded.bothSidesHadBytes, let single = decoded.new ?? decoded.old {
+                    ImageCanvas(image: single).padding(16)
+                } else {
+                    BinaryPlaceholder(file: file, caption: "Can\u{2019}t display image")
+                }
+            } else {
+                ProgressView().controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: file.id) {
+            // NSImage isn't Sendable, so decode on the main actor — but yield first so the
+            // spinner paints before the decode work runs, instead of blocking this body.
+            await Task.yield()
+            decoded = Decoded(old: content.old.flatMap { NSImage(data: $0) },
+                              new: content.new.flatMap { NSImage(data: $0) },
+                              bothSidesHadBytes: content.old != nil && content.new != nil)
         }
     }
 }
