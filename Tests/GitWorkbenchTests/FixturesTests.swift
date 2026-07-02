@@ -13,11 +13,11 @@ final class FixturesTests: XCTestCase {
     }
 
     func test_fileCountsAndStagedSplit() {
-        XCTAssertEqual(Fixtures.repositoryStatus.files.count, 7)
+        XCTAssertEqual(Fixtures.repositoryStatus.files.count, 10)
         let staged = Fixtures.repositoryStatus.files.filter(\.isStaged)
         let unstaged = Fixtures.repositoryStatus.files.filter { !$0.isStaged }
         XCTAssertEqual(staged.map(\.path), ["src/commands/sync.ts", "src/index.ts", "src/utils/logger.ts"])
-        XCTAssertEqual(unstaged.count, 4)
+        XCTAssertEqual(unstaged.count, 7)
     }
 
     func test_commitCountAndRefs() {
@@ -40,7 +40,7 @@ final class FixturesTests: XCTestCase {
 
     func test_initialStateBuildsFromFixtures() {
         let s = Fixtures.initialState
-        XCTAssertEqual(s.repo.files.count, 7)
+        XCTAssertEqual(s.repo.files.count, 10)
         XCTAssertEqual(s.commits.count, 6)
         XCTAssertEqual(s.stashes.count, 2)
         XCTAssertEqual(s.branches.count, 4)

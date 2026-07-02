@@ -6,6 +6,10 @@ public enum FixtureDiffs {
 
     /// Resolve a diff for a file in a context, or nil if there is no fixture for it.
     public static func diff(for file: FileChange, context: DiffRequest.Context) -> FileDiff? {
+        // Binary image/PDF fixtures (issue #12) live only in the working tree.
+        if case .workingTree = context, let content = binaryContent[file.path] {
+            return FileDiff(file: file, hunks: [], isBinary: true, binaryContent: content)
+        }
         let hunks: [DiffHunk]?
         switch context {
         case .workingTree:
@@ -18,6 +22,14 @@ public enum FixtureDiffs {
         guard let hunks else { return nil }
         return DiffBuilder.fileDiff(file, hunks: hunks)
     }
+
+    // MARK: Binary content (image/PDF), keyed by working-tree path
+
+    static let binaryContent: [String: BinaryContent] = [
+        "assets/banner.png": BinaryContent(kind: .image, old: FixtureImages.bannerOld, new: FixtureImages.bannerNew),
+        "assets/screenshot.png": BinaryContent(kind: .image, old: nil, new: FixtureImages.screenshotNew),
+        "docs/spec.pdf": BinaryContent(kind: .pdf, old: FixtureImages.specOld, new: FixtureImages.specNew),
+    ]
 
     // MARK: Working-tree diffs (by path) — ported from gitdata.js `files`
 

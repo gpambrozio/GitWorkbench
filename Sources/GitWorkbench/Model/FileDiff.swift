@@ -6,11 +6,18 @@ public struct FileDiff: Sendable, Hashable {
     public var file: FileChange
     public var hunks: [DiffHunk]
     public var isBinary: Bool
+    /// Renderable bytes for a binary file the viewer can display (images, PDFs). When set, the diff
+    /// pane shows the rich image/PDF comparison instead of the "Binary file" placeholder. `nil` for a
+    /// text diff or a binary the built-in viewers don't understand. See ``BinaryContent``.
+    public var binaryContent: BinaryContent?
 
-    public init(file: FileChange, hunks: [DiffHunk], isBinary: Bool = false) {
+    public init(file: FileChange, hunks: [DiffHunk], isBinary: Bool = false, binaryContent: BinaryContent? = nil) {
         self.file = file
         self.hunks = hunks
-        self.isBinary = isBinary
+        // Carrying renderable binary content implies the file is binary — keep the flag consistent so
+        // existing `isBinary` checks still hold whether or not the content could be loaded.
+        self.isBinary = isBinary || binaryContent != nil
+        self.binaryContent = binaryContent
     }
 }
 

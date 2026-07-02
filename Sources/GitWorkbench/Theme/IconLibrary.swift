@@ -18,6 +18,13 @@ public enum IconLibrary {
     public static let folder = "folder"
     public static let splitColumns = "rectangle.split.2x1"
     public static let unifiedRows = "equal"
+
+    // Image-comparison controls (issue #12: image/PDF viewing).
+    public static let compareSideBySide = "rectangle.split.2x1"
+    public static let compareSwipe = "slider.horizontal.below.square.and.square.filled"
+    public static let compareFade = "circle.lefthalf.filled"
+    public static let axisVertical = "arrow.left.and.right"
+    public static let axisHorizontal = "arrow.up.and.down"
     public static let ellipsis = "ellipsis"
     public static let branch = "arrow.triangle.branch"
     public static let tag = "tag"

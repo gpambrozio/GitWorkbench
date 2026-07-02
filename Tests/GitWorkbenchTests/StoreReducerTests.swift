@@ -122,7 +122,7 @@ final class StoreReducerTests: XCTestCase {
         let store = makeStore()
         await store.reload()
         XCTAssertEqual(store.state.repo.repositoryName, "aurora-cli")
-        XCTAssertEqual(store.state.repo.files.count, 7)
+        XCTAssertEqual(store.state.repo.files.count, 10)
         XCTAssertEqual(store.state.commits.count, 6)
         XCTAssertEqual(store.state.stashes.count, 2)
         XCTAssertEqual(store.state.branches.count, 4)
@@ -140,7 +140,7 @@ final class StoreReducerTests: XCTestCase {
         let summary = try! XCTUnwrap(store.summary)
         XCTAssertEqual(summary.repositoryName, "aurora-cli")
         XCTAssertEqual(summary.currentBranch, "feat/auto-sync")
-        XCTAssertEqual(summary.changedFileCount, 7)
+        XCTAssertEqual(summary.changedFileCount, 10)
         // Matches deriving directly from the loaded status via the public initializer.
         XCTAssertEqual(summary, RepositorySummary(store.state.repo, isBusy: store.state.isBusy))
     }
@@ -221,7 +221,7 @@ final class StoreReducerTests: XCTestCase {
 
     func test_previewStoreIsSeeded() {
         let store = GitWorkbenchStore.preview
-        XCTAssertEqual(store.state.repo.files.count, 7)
+        XCTAssertEqual(store.state.repo.files.count, 10)
         XCTAssertNotNil(store.state.selectedFileID)
         XCTAssertNotNil(store.state.currentDiff)
     }

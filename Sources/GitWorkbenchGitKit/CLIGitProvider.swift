@@ -119,7 +119,60 @@ public struct CLIGitProvider: GitWorkbenchProvider {
             // a commit, so diff its base (^1) against its tip for the one file, like `git show` does.
             text = try await runner.output(["diff", "\(id)^", id, "--", request.file.path]).text
         }
-        return DiffParser.parse(unifiedDiff: text, file: request.file)
+        let parsed = DiffParser.parse(unifiedDiff: text, file: request.file)
+        // A binary git can't show as text: if it's an image/PDF we can render, load the old/new bytes
+        // so the pane shows the picture instead of the "Binary file" placeholder (issue #12).
+        if parsed.isBinary, let content = await binaryContent(for: request) {
+            return FileDiff(file: request.file, hunks: [], isBinary: true, binaryContent: content)
+        }
+        return parsed
+    }
+
+    // MARK: Binary (image/PDF) content
+
+    /// Loads the old/new blob bytes for a binary file the viewer can render (image/PDF). Returns nil
+    /// for a binary kind we don't render, or when neither side's bytes could be read — either way the
+    /// pane falls back to the placeholder. A missing side is expected and encoded as nil: an added file
+    /// has no `old`, a deleted file no `new`.
+    private func binaryContent(for request: DiffRequest) async -> BinaryContent? {
+        guard let kind = BinaryContent.kind(forPath: request.file.path) else { return nil }
+        let path = request.file.path
+        let old: Data?, new: Data?
+        switch request.context {
+        case .workingTree(let staged):
+            if staged {
+                old = try? await blobData("HEAD:\(path)")   // last committed version
+                new = try? await blobData(":\(path)")        // staged (index) version
+            } else {
+                old = try? await blobData(":\(path)")        // index version (nil when untracked)
+                new = workingTreeData(path)                  // on-disk version (nil when deleted)
+            }
+        case .commit(let id):
+            old = try? await blobData("\(id)^:\(path)")      // parent (nil at the root commit)
+            new = try? await blobData("\(id):\(path)")       // this commit (nil when deleted here)
+        case .stash(let id):
+            old = try? await blobData("\(id)^:\(path)")
+            new = try? await blobData("\(id):\(path)")
+        }
+        guard old != nil || new != nil else { return nil }
+        return BinaryContent(kind: kind, old: old, new: new)
+    }
+
+    /// Raw bytes of the blob addressed by a `<rev>:<path>` spec, throwing when it doesn't exist there
+    /// (so callers use `try?` to map "absent at this rev" → nil, e.g. an added file has no parent blob).
+    private func blobData(_ spec: String) async throws -> Data {
+        let result = try await runner.run(["show", spec])
+        guard result.exitCode == 0 else {
+            throw GitError.commandFailed(arguments: ["show", spec], code: result.exitCode, stderr: result.stderr)
+        }
+        return result.stdout
+    }
+
+    /// The working-tree file's bytes read straight off disk — the "new" side of an unstaged change —
+    /// or nil if it isn't there (an unstaged deletion). Resolved against the repository root, like the
+    /// rest of the provider's repo-relative paths.
+    private func workingTreeData(_ path: String) -> Data? {
+        try? Data(contentsOf: runner.repositoryURL.appending(path: path))
     }
 
     /// An untracked file has no tracked diff, so `git diff -- <path>` is empty. Show its whole
