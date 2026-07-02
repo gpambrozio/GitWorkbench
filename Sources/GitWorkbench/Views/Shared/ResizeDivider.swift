@@ -11,10 +11,16 @@ final class ColumnLayout: ObservableObject {
     @Published var railWidth: CGFloat { didSet { persist() } }
     @Published var changesListWidth: CGFloat { didSet { persist() } }
     @Published var historyListWidth: CGFloat { didSet { persist() } }
+    /// User's preferred height for the History commit-message area (see `MessageResize`). The default
+    /// is a large sentinel meaning "as tall as the content/pane allow"; a drag stores a concrete value.
+    @Published var commitMessageHeight: CGFloat { didSet { persist() } }
 
     let railRange: ClosedRange<CGFloat>
     let changesListRange: ClosedRange<CGFloat>
     let historyListRange: ClosedRange<CGFloat>
+    /// Stored raw; the effective height is re-clamped per commit against the measured pane in the view.
+    private static let commitMessageRange: ClosedRange<CGFloat> = 40...100_000
+    static let commitMessageHeightDefault: CGFloat = 100_000   // sentinel: show natural until dragged
 
     private let store: WorkbenchLayoutStore?
     private let key: String
@@ -23,6 +29,7 @@ final class ColumnLayout: ObservableObject {
         static let rail = "rail"
         static let changesList = "changesList"
         static let historyList = "historyList"
+        static let commitMessage = "commitMessage"
     }
 
     init(configuration: WorkbenchConfiguration = .init()) {
@@ -44,6 +51,8 @@ final class ColumnLayout: ObservableObject {
         self.railWidth = Self.value(saved, Column.rail, fallback: l.railWidth, range: railRange)
         self.changesListWidth = Self.value(saved, Column.changesList, fallback: l.changesListWidth, range: changesRange)
         self.historyListWidth = Self.value(saved, Column.historyList, fallback: l.historyListWidth, range: historyRange)
+        self.commitMessageHeight = Self.value(saved, Column.commitMessage,
+                                              fallback: Self.commitMessageHeightDefault, range: Self.commitMessageRange)
     }
 
     private static func value(_ saved: [String: CGFloat]?, _ name: String,
@@ -55,7 +64,8 @@ final class ColumnLayout: ObservableObject {
     private func persist() {
         store?.save(key, [Column.rail: railWidth,
                           Column.changesList: changesListWidth,
-                          Column.historyList: historyListWidth])
+                          Column.historyList: historyListWidth,
+                          Column.commitMessage: commitMessageHeight])
     }
 }
 
@@ -90,6 +100,39 @@ struct ResizeDivider: View {
                                 width = min(range.upperBound, max(range.lowerBound, base + value.translation.width))
                             }
                             .onEnded { _ in dragStart = nil }
+                    )
+            }
+    }
+}
+
+/// A 1px horizontal separator with a wider invisible grab strip: drag **vertically** to resize the
+/// regions above/below it. Unlike `ResizeDivider` it doesn't own the value — it reports the cumulative
+/// drag translation (in points, down = positive) and the caller applies its own clamping, because the
+/// valid range here depends on measured, per-commit geometry. Row-resize cursor on hover; accent while
+/// active. Measured in GLOBAL space so the divider moving under the cursor doesn't cause jitter.
+struct RowResizeDivider: View {
+    /// Cumulative vertical translation since the drag began (down = positive).
+    let onChanged: (CGFloat) -> Void
+    let onEnded: () -> Void
+    @Environment(\.workbenchTheme) private var theme
+    @State private var active = false
+    @State private var hovering = false
+
+    var body: some View {
+        Rectangle()
+            .fill(active || hovering ? theme.accent : theme.sep)
+            .frame(height: 1)
+            .frame(maxWidth: .infinity)
+            .overlay {
+                Color.clear
+                    .frame(height: 11)
+                    .contentShape(Rectangle())
+                    .pointerStyle(.rowResize)
+                    .onHover { hovering = $0 }
+                    .gesture(
+                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                            .onChanged { active = true; onChanged($0.translation.height) }
+                            .onEnded { _ in active = false; onEnded() }
                     )
             }
     }
