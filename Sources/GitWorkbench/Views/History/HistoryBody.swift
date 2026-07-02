@@ -3,10 +3,11 @@ import SwiftUI
 /// The History workspace: commit list (360) + commit detail.
 struct HistoryBody: View {
     var store: GitWorkbenchStore
-    @EnvironmentObject private var layout: ColumnLayout
+    @Environment(ColumnLayout.self) private var layout
     @Environment(\.workbenchTheme) private var theme
 
     var body: some View {
+        @Bindable var layout = layout
         HStack(spacing: 0) {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {

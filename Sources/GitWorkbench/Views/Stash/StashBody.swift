@@ -3,10 +3,11 @@ import SwiftUI
 /// The Stash workspace: stash list (360) + stash detail (or empty states).
 struct StashBody: View {
     var store: GitWorkbenchStore
-    @EnvironmentObject private var layout: ColumnLayout
+    @Environment(ColumnLayout.self) private var layout
     @Environment(\.workbenchTheme) private var theme
 
     var body: some View {
+        @Bindable var layout = layout
         HStack(spacing: 0) {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {

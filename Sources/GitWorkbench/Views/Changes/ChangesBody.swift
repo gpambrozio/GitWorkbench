@@ -3,10 +3,11 @@ import SwiftUI
 /// The Changes workspace: file-list + composer pane (320), then the diff pane; discard confirm overlays.
 struct ChangesBody: View {
     var store: GitWorkbenchStore
-    @EnvironmentObject private var layout: ColumnLayout
+    @Environment(ColumnLayout.self) private var layout
     @Environment(\.workbenchTheme) private var theme
 
     var body: some View {
+        @Bindable var layout = layout
         HStack(spacing: 0) {
             VStack(spacing: 0) {
                 ChangesFileList(store: store)

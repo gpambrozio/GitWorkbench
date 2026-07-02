@@ -8,7 +8,7 @@ import AppKit
 /// dragging down grows it back up to its natural height. The author row stays pinned below the message.
 /// The chosen height persists via `ColumnLayout` (like the column widths). See `MessageResize`.
 struct CommitDetail: View {
-    @EnvironmentObject private var layout: ColumnLayout
+    @Environment(ColumnLayout.self) private var layout
     var store: GitWorkbenchStore
     @Environment(\.workbenchTheme) private var theme
     let commit: Commit

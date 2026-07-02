@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 
 /// Live, resizable widths for the workbench's columns, seeded from `configuration.layout`. Owned by
 /// `GitWorkbenchView` and shared with the workspace bodies through the environment, so a drag persists
@@ -7,13 +8,14 @@ import SwiftUI
 /// Persistence is delegated to the host via `configuration.layoutStore` (keyed by `persistenceKey`):
 /// widths are loaded on init and saved on every change. With no store the layout is purely in-session —
 /// the component never touches `UserDefaults` itself.
-final class ColumnLayout: ObservableObject {
-    @Published var railWidth: CGFloat { didSet { persist() } }
-    @Published var changesListWidth: CGFloat { didSet { persist() } }
-    @Published var historyListWidth: CGFloat { didSet { persist() } }
+@Observable @MainActor
+final class ColumnLayout {
+    var railWidth: CGFloat { didSet { persist() } }
+    var changesListWidth: CGFloat { didSet { persist() } }
+    var historyListWidth: CGFloat { didSet { persist() } }
     /// User's preferred height for the History commit-message area (see `MessageResize`). The default
     /// is a large sentinel meaning "as tall as the content/pane allow"; a drag stores a concrete value.
-    @Published var commitMessageHeight: CGFloat { didSet { persist() } }
+    var commitMessageHeight: CGFloat { didSet { persist() } }
 
     let railRange: ClosedRange<CGFloat>
     let changesListRange: ClosedRange<CGFloat>
