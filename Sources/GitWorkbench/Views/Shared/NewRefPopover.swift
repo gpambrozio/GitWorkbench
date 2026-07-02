@@ -41,6 +41,7 @@ struct NewRefPopover: View {
                     .onSubmit { Task { await store.confirmRefCreation() } }
                 HStack(spacing: 10) {
                     capsuleButton("Cancel", fill: theme.neutralFill(0.07), fg: theme.ink) { store.cancelRefCreation() }
+                        .keyboardShortcut(.cancelAction)
                     capsuleButton(actionTitle, fill: theme.accent, fg: .white) { Task { await store.confirmRefCreation() } }
                         .opacity(canCreate ? 1 : 0.5)
                         .disabled(!canCreate)
