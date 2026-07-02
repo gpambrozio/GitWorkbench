@@ -62,8 +62,9 @@ public struct CLIGitProvider: GitWorkbenchProvider {
     }
 
     public func loadBranches() async throws -> [Branch] {
-        // `%(upstream:track)` is kept last: it expands to human text like "[ahead 2, behind 1]"
-        // (contains spaces and a comma), so trailing it keeps those out of the earlier fields.
+        // `%(upstream:track)` is kept last purely for readability of the git command: it expands to
+        // human text like "[ahead 2, behind 1]". Fields are split on `\u{1f}` (unit separator), so its
+        // internal spaces/comma never leak into other fields regardless of position.
         let out = try await runner.output(["for-each-ref",
             "--format=%(refname:short)\u{1f}%(upstream:short)\u{1f}%(HEAD)\u{1f}%(upstream:track)", "refs/heads"]).text
         return RefParser.parse(out)

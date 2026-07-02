@@ -411,7 +411,11 @@ public extension GitWorkbenchStore {
     /// `for-each-ref`; this keeps the two consistent in the window before that — and in the mock, which
     /// has no filesystem watcher to trigger one.
     private func syncCurrentBranchDivergence() {
-        guard let idx = state.branches.firstIndex(where: { $0.name == state.repo.currentBranch }) else { return }
+        // Only mirror when the branch has an upstream: `commit()` bumps `state.repo.ahead` even on an
+        // upstream-less branch, and writing that here would render a bogus `↑` badge (`AheadBehindBadge`
+        // shows nothing without an upstream). CLI hosts self-heal on the next reload; the mock does not.
+        guard let idx = state.branches.firstIndex(where: { $0.name == state.repo.currentBranch }),
+              state.branches[idx].upstream != nil else { return }
         state.branches[idx].ahead = state.repo.ahead
         state.branches[idx].behind = state.repo.behind
     }

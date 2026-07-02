@@ -143,6 +143,8 @@ extension MockGitProvider {
         await pause()
         status.currentBranch = branch.name
         status.upstream = branch.upstream
+        status.ahead = branch.ahead
+        status.behind = branch.behind
         branches = branches.map {
             Branch(name: $0.name, isCurrent: $0.name == branch.name, upstream: $0.upstream,
                    ahead: $0.ahead, behind: $0.behind)
@@ -154,7 +156,10 @@ extension MockGitProvider {
         // Create a local branch tracking the remote (if it doesn't exist yet), then make it current.
         status.currentBranch = branch.name
         status.upstream = branch.id
-        if !branches.contains(where: { $0.name == branch.name }) {
+        let existing = branches.first { $0.name == branch.name }
+        status.ahead = existing?.ahead ?? 0
+        status.behind = existing?.behind ?? 0
+        if existing == nil {
             branches.append(Branch(name: branch.name, upstream: branch.id))
         }
         branches = branches.map {
