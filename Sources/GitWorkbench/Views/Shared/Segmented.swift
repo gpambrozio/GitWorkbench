@@ -14,6 +14,10 @@ struct Segmented<Value: Hashable>: View {
     @Binding var value: Value
     let options: [SegmentedOption<Value>]
 
+    /// The selected segment sits on an always-white pill (below), so its ink must stay dark in both
+    /// schemes — `theme.ink` flips to near-white in dark mode and would vanish on the white fill.
+    private var selectedInk: Color { WorkbenchTheme.standard.ink }
+
     var body: some View {
         HStack(spacing: 2) {
             ForEach(options) { option in
@@ -24,7 +28,7 @@ struct Segmented<Value: Hashable>: View {
                         if let label = option.label { Text(label) }
                     }
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isSelected ? theme.ink : theme.ink2)
+                    .foregroundStyle(isSelected ? selectedInk : theme.ink2)
                     .padding(.horizontal, 10)
                     .frame(height: 22)
                     .background {

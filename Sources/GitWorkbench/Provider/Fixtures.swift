@@ -5,7 +5,8 @@ import Foundation
 public enum Fixtures {
     public static let author = Author(name: "Gustavo", initials: "GA")
 
-    // MARK: Working-tree files (7)
+    // MARK: Working-tree files (10). The three binary entries (issue #12) are unstaged so the staged
+    // set stays the three source files above them.
     public static let files: [FileChange] = [
         FileChange(path: "src/commands/sync.ts", status: .modified, isStaged: true, additions: 24, deletions: 6),
         FileChange(path: "src/index.ts", status: .modified, isStaged: true, additions: 8, deletions: 2),
@@ -14,6 +15,9 @@ public enum Fixtures {
         FileChange(path: "README.md", status: .modified, isStaged: false, additions: 5, deletions: 0),
         FileChange(path: "src/legacy/poller.ts", status: .deleted, isStaged: false, additions: 0, deletions: 18),
         FileChange(path: ".env.example", status: .untracked, isStaged: false, additions: 4, deletions: 0),
+        FileChange(path: "assets/banner.png", status: .modified, isStaged: false),      // modified image
+        FileChange(path: "docs/spec.pdf", status: .modified, isStaged: false),          // modified PDF
+        FileChange(path: "assets/screenshot.png", status: .untracked, isStaged: false), // added image
     ]
 
     public static let repositoryStatus = RepositoryStatus(
