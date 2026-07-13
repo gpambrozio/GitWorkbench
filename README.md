@@ -229,3 +229,7 @@ from the **Theme** menu, and watch it refresh live as the working tree changes o
 swift build
 swift test
 ```
+
+## License
+
+GitWorkbench is released under the [MIT License](LICENSE).
